@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
+import 'core/api/spec/session_refresher.dart';
+import 'features/auth/application/auth_session_refresher.dart';
 
 /// 앱 전역 초기화.
 ///
@@ -36,7 +38,18 @@ Future<void> bootstrap() async {
         return true;
       };
 
-      runApp(const ProviderScope(child: SchoolBusApp()));
+      runApp(
+        ProviderScope(
+          // 합성 지점(composition root) — core 가 선언만 해둔 포트에 실제 구현을 꽂는다.
+          // core 는 features 를 import 하지 않으므로(컨벤션 C-1) 배선은 여기서만 한다.
+          overrides: [
+            sessionRefresherProvider.overrideWith(
+              (ref) => AuthSessionRefresher(ref),
+            ),
+          ],
+          child: const SchoolBusApp(),
+        ),
+      );
     },
     // runZonedGuarded 는 위 두 핸들러가 못 잡는 비동기 에러의 마지막 그물이다.
     _report,

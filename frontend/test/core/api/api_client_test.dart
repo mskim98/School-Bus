@@ -9,10 +9,9 @@ import 'package:school_bus/core/api/api_response.dart';
 
 /// 서버 대신 정해진 응답을 돌려주는 어댑터. 네트워크 없이 [ApiClient] 를 검증한다.
 class _FakeAdapter implements HttpClientAdapter {
-  _FakeAdapter({this.statusCode = 200, this.body = '{}', this.throwError});
-
-  int statusCode;
-  String body;
+  // 각 테스트가 필요한 값만 골라 덮어쓰도록 필드로만 둔다.
+  int statusCode = 200;
+  String body = '{}';
   DioException? throwError;
 
   /// 마지막 요청 — 쿼리 파라미터 정리 검증에 쓴다.

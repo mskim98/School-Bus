@@ -2,10 +2,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../storage/impl/secure_token_storage.dart';
 import 'api_config.dart';
 import 'api_exception.dart';
 import 'api_response.dart';
+import 'interceptor/auth_interceptor.dart';
 import 'interceptor/logging_interceptor.dart';
+import 'spec/session_refresher.dart';
 
 /// HTTP 접근의 유일한 통로.
 ///
@@ -146,7 +149,22 @@ class ApiClient {
   }
 }
 
-/// 앱 전역 [ApiClient].
+/// 앱 전역 [ApiClient] — 인증 인터셉터가 끼워진 상태로 나온다.
 ///
-/// C4 에서 인증 인터셉터를 `extraInterceptors` 로 끼우도록 이 provider 를 확장한다.
-final apiClientProvider = Provider<ApiClient>((ref) => ApiClient.create());
+/// ⚠️ 의존 순환 주의: 재발급 구현은 `authRepositoryProvider` 를 거쳐 **이 provider** 로
+/// 되돌아온다. 그래서 [SessionRefresher] 를 여기서 `watch` 하지 않고
+/// **콜백 안에서 `ref.read` 로 늦게** 꺼낸다 — provider 그래프를 만들 때가 아니라
+/// 401 이 실제로 났을 때 해석되므로 순환이 성립하지 않는다.
+final apiClientProvider = Provider<ApiClient>((ref) {
+  final storage = ref.watch(tokenStorageProvider);
+  return ApiClient.create(
+    extraInterceptors: [
+      AuthInterceptor(
+        storage: storage,
+        refreshTokens: () => ref.read(sessionRefresherProvider).refresh(),
+        onSessionExpired: () =>
+            ref.read(sessionRefresherProvider).onSessionExpired(),
+      ),
+    ],
+  );
+});

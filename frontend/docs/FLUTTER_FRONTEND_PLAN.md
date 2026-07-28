@@ -352,8 +352,18 @@ server {
   - 설계 포인트: ① HTTP 200 + `success:false` 도 예외로 처리(계약 변경 시 조용히 통과 방지)
     ② `?date=null` 로 400 나는 사고를 막는 쿼리 정리 ③ 로깅은 debug 빌드만, Authorization 은 존재 여부만 기록
   - **검증**: `flutter test` **13/13 통과**(봉투 해제 5 · status 매핑 4 · 네트워크 2 · 쿼리 정리 2), `flutter analyze` 무경고
-- [ ] ⬜ **C4** 로그인 화면 + 토큰 저장 + JWT 디코딩(§3.4) + 401 자동 refresh 인터셉터(뮤텍스 포함, §3.3)
-  - 검증: 5개 시드 계정 전부 로그인 → 역할·tenantId가 올바르게 파싱되는지
+- [x] ✅ **C4** 로그인 화면 + 토큰 저장 + JWT 디코딩(§3.4) + 401 자동 refresh 인터셉터(뮤텍스 포함, §3.3)
+  - `core/storage/{spec,impl}` — `TokenStorage` 포트 + `SecureTokenStorage`
+  - `core/api/interceptor/auth_interceptor.dart` — Bearer 부착, 401 → 재발급 → **1회만** 재시도
+  - `features/auth/` — `JwtDecoder`(memberships 파싱) · `AuthRepository` · `AuthController` · `LoginScreen`
+  - `shared/domain/` — `Role`(MVP 지원 여부 포함) · `AuthSession`
+  - ⭐ **DIP 적용**: `core`가 `features`를 import하면 컨벤션 C-1 위반이라, core에 `SessionRefresher` **포트**를 두고
+    구현(`AuthSessionRefresher`)은 `bootstrap()`에서 provider override로 주입한다 — `bootstrap.dart`가 합성 지점
+  - ⚠️ **재시도용 Dio는 주입 가능하게** 뒀다. 별도 인스턴스로 고정하면 테스트의 가짜 어댑터를 못 타고 실제 네트워크로 나간다
+  - **검증**: `flutter test` **30/30 통과** — 그중 핵심 2건:
+    ① *동시에 401을 받아도 재발급은 1회만*(폴링+알림이 같이 만료되는 상황) ② *재시도가 또 401이어도 무한 반복 안 함*
+    JWT: `":PLATFORM_ADMIN"`(tenantId 빈 문자열) · 복수 멤버십 · 알 수 없는 역할 · base64 padding 전부 커버
+  - **실환경 검증**: CORS preflight에서 `Authorization` 헤더 허용 확인, `Origin: localhost:3000`으로 로그인 200
 - [ ] ⬜ **C5** `go_router` + 역할별 redirect 가드 + 반응형 셸(§2 `app/`)
   - 검증: 기사 계정으로 `/admin` 직접 접근 시 차단, 새로고침 시 세션 유지
 
@@ -391,9 +401,11 @@ server {
 > **한 항목(C*)을 끝낼 때마다 §6 체크박스와 이 절을 갱신하고 커밋한다.** 다음 세션은 이 문서만 읽고 이어간다.
 > 항목을 마치지 않은 채 다음으로 넘어가지 않는다.
 
-- **마지막 완료 항목**: **C3** — `core/api/` 완성(dio 캡슐화·봉투 해제·예외 통일). `flutter test` 13/13
-- **다음 할 일**: **C4** — 로그인 화면 + 토큰 저장(`TokenStorage` 포트) + JWT 디코딩(§3.4) + 401 자동 refresh 인터셉터(**뮤텍스 필수**, §3.3)
-- **그 다음**: C5(go_router·역할가드) → C6~C8(기사) → C9~C11(관리자)
+- **마지막 완료 항목**: **C4** — 인증 전체(로그인·토큰보관·JWT해석·401 자동재발급). `flutter test` 30/30
+- **다음 할 일**: **C5** — `go_router` + `AppRoutes` 경로 상수 + 역할별 redirect 가드 + 반응형 셸
+  - `app/app.dart`의 `_SessionGate`·`_SignedInPlaceholder`(C4 임시 분기)를 **라우터로 교체**하는 게 C5의 첫 작업이다
+- **그 다음**: C6~C8(기사) → C9~C11(관리자). **C6부터 에이전트 팀 병렬 투입** 예정
+- **브라우저 확인**: `http://localhost:3000` → 로그인(`driver@school.com` / `password`) → 역할·userId·tenantId 표시 확인 가능
 - **인프라 상태**: postgres(healthy)·redis·kafka·backend 4개 기동 중.
   꺼졌다면 §9의 PATH를 잡고 `docker compose up -d --build`(볼륨이 없어 `down` 후 `up`이면 시드 상태로 리셋된다)
 - **에이전트 활용**: 화면 작업(C6~C11)은 feature 단위로 병렬화 가능 — 에이전트에 `FLUTTER_CODE_CONVENTIONS.md` 준수를 명시하고,
