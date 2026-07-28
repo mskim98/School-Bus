@@ -36,7 +36,14 @@
   - 전역 7개에 없는 역할이라 "에이전트 복제 금지" 정책과 충돌하지 않는다
   - 체크리스트 분담을 명시: **C-1~C-7 = `convention-auditor` / C-8 = `design-system-auditor`** (중복 지적 방지)
   - `PROJECT_NOTES.md` 에 프론트 전용 절 신설 — 이 둘만 `frontend/` 에서 동작한다는 사실이 없으면 백엔드 Gradle 사실을 잘못 적용한다
-- [ ] ⬜ **D3** 테마 토큰 코드화 — `app/theme/{app_theme,app_colors,app_typography,app_spacing}.dart`
+- [x] ✅ **D3** 테마 토큰 코드화 — `app/theme/{app_theme,app_colors,app_typography,app_spacing}.dart`
+  - `AppColors extends ThemeExtension` 신설 — success·warning·map 3계열 + `context.appColors` 축약
+  - `AppTypography` 신설 — 11개 슬롯 + `mono()`(tabularFigures) + `caption()`
+  - `AppSpacing`: `smd`(12) 추가 · `radiusSm` **6→8**(칩·태그). **기존 이름은 그대로** — 24개 파일이 이미 쓰고 있다
+  - `AppTouch` 신설(min 48 / primary 56) — 터치 크기는 취향이 아니라 안전 요구라 별도 클래스로 뺐다
+  - `AppTheme`: 컴포넌트 테마 12종. **버튼 4종·입력·아이콘버튼에 48dp 를 전역 보장**해 화면마다 챙기다 빠뜨리는 걸 막았다
+  - ⚠️ 반경 용도 이동 — 카드 12→**20**, 버튼·입력 6→**12**. 화면별 잔재는 D5~D8 에서 정리
+  - **검증**: `flutter analyze` 무경고 · `dart format` 변경 0 · `flutter test` **203/203**
 - [ ] ⬜ **D4** `core/ui` 공용 컴포넌트 — `AppStatusChip`·`AppActionButton`·`SkeletonBox`·`OfflineBanner` + 기존 4종 외형 교체
 - [ ] ⬜ **D5** 기사 — 로그인 · 운행 시작 *(에이전트)*
 - [ ] ⬜ **D6** 기사 — 오늘의 노선(지도) · 위치 보고 *(에이전트)*
@@ -83,12 +90,12 @@
 
 ### 지금 상태
 
-- **D0~D2 완료·커밋됨**
+- **D0~D3 완료·커밋됨**
 - 기준선: `flutter analyze` 무경고 · `flutter test` **203/203** · Flutter 3.44.8 / Dart 3.12.2 (`/opt/homebrew/bin/flutter`)
 
 ### 다음에 할 일
 
-**D3** 부터 순서대로. D3·D4 가 끝나기 전에는 D5~D8 에이전트를 띄우지 않는다(공용 토큰이 없으면 화면이 매직넘버로 채워진다).
+**D4** 부터 순서대로. D3·D4 가 끝나기 전에는 D5~D8 에이전트를 띄우지 않는다(공용 토큰이 없으면 화면이 매직넘버로 채워진다).
 
 ---
 
