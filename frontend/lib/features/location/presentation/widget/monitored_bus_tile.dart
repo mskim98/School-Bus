@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
+import '../../../../core/ui/app_status_chip.dart';
+import '../../../../core/ui/app_tone.dart';
 import '../../domain/monitored_bus.dart';
 
 /// 관제 목록의 버스 한 줄.
@@ -8,6 +11,9 @@ import '../../domain/monitored_bus.dart';
 /// "위치 없음"을 **에러가 아니라 상태로** 보여준다 — 아직 한 번도 보고하지 않은
 /// 버스는 응답 배열에 아예 없기 때문에(계획서 §3.6), 목록에서 빠지면 관리자는
 /// 그 버스가 사라진 줄 안다.
+///
+/// 모양은 알림 행(§5.2)과 맞췄다 — 좌측 40 원형 아이콘 + 본문 + 우측 시각(mono).
+/// 관제와 알림함이 같은 리듬으로 읽혀야 두 화면을 오갈 때 눈이 다시 훑지 않는다.
 class MonitoredBusTile extends StatelessWidget {
   const MonitoredBusTile({
     super.key,
@@ -30,53 +36,112 @@ class MonitoredBusTile extends StatelessWidget {
   /// 서버 갱신 3초 · 폴링 3초 기준으로 여유를 크게 잡은 값이다.
   static const staleAfter = Duration(seconds: 20);
 
+  /// 좌측 원형 아이콘 지름(§5.2 알림 행과 동일).
+  static const _iconSize = 40.0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final position = bus.position;
     final staleness = bus.staleness(now);
     final isStale = staleness != null && staleness > staleAfter;
 
-    final (IconData icon, Color color, String status) = switch (position) {
+    // 색·아이콘·라벨 3중 표기(§0-1). 관제는 태블릿으로 차 안에서도 보므로
+    // 기사 앱과 같은 규칙을 그대로 적용한다.
+    final (
+      IconData icon,
+      AppTone tone,
+      String mark,
+      String status,
+    ) = switch (position) {
       null => (
         Icons.location_disabled_outlined,
-        theme.colorScheme.outline,
+        AppTone.neutral,
+        '·',
         '위치 보고 없음',
       ),
       _ when isStale => (
         Icons.warning_amber_outlined,
-        theme.colorScheme.error,
-        '${_elapsedLabel(staleness)} 갱신 없음',
+        AppTone.error,
+        '!',
+        '갱신 끊김',
       ),
-      _ => (
-        Icons.directions_bus,
-        theme.colorScheme.primary,
-        '${_elapsedLabel(staleness)} 수신 · ${position.origin.label}',
-      ),
+      _ => (Icons.directions_bus, AppTone.primary, '◎', '수신 중'),
     };
 
-    return ListTile(
-      selected: selected,
-      onTap: onTap,
-      leading: Icon(icon, color: color),
-      title: Text(bus.name.isEmpty ? '버스 ${bus.busId}' : bus.name),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            status,
-            style: theme.textTheme.bodySmall?.copyWith(color: color),
+    return Material(
+      // 선택된 줄은 지도에서 지금 보고 있는 대상이다 — 승차 칩과 같은 톤을 쓴다.
+      color: selected ? scheme.primaryContainer : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          // 마우스로 쓴다고 줄이지 않는다(§10) — 태블릿 관제를 배제하지 않았다.
+          constraints: const BoxConstraints(minHeight: AppTouch.min),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.smd,
           ),
-          Text(
-            _subtitleOf(bus),
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: _iconSize,
+                height: _iconSize,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: tone.container(context),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 20, color: tone.onContainer(context)),
+              ),
+              const SizedBox(width: AppSpacing.smd),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      bus.name.isEmpty ? '버스 ${bus.busId}' : bus.name,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      _subtitleOf(bus),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.xs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        AppStatusChip(icon: mark, label: status, tone: tone),
+                        if (position != null)
+                          Text(
+                            position.origin.label,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              // 마지막으로 좌표를 받은 시각. 3초마다 갱신되므로 자릿수를 고정한다(§2.1).
+              Text(
+                position == null ? '—' : _elapsedLabel(staleness),
+                style: AppTypography.mono(context).copyWith(
+                  color: isStale ? scheme.error : scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-      trailing: position == null
-          ? null
-          : const Icon(Icons.my_location, size: 16),
     );
   }
 

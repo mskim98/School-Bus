@@ -4,8 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../core/ui/app_action_button.dart';
+import '../../../../core/ui/app_status_chip.dart';
+import '../../../../core/ui/app_tone.dart';
 import '../../../../core/ui/async_section.dart';
 import '../../../../core/ui/empty_view.dart';
+import '../../../../core/ui/skeleton_box.dart';
 import '../../application/admin_dispatch_controller.dart';
 import '../../application/admin_tenant_provider.dart';
 import '../../domain/auto_assign_result.dart';
@@ -20,8 +24,17 @@ import '../widget/route_plan_map.dart';
 /// 제안(`auto-assign`)은 **아직 아무것도 바꾸지 않는다.** 학생 배정 커밋·승인·배포는
 /// 전부 확정(`auto-assign/confirm`) 한 번에 일어난다. 이 차이를 화면이 분명히 해야
 /// 관리자가 "제안만 받고 끝냈는데 왜 기사에게 안 보이지"를 겪지 않는다.
+///
+/// 그래서 헤더에 단계 표시([_StageSteps])를 세워 뒀다 — 지금 어디까지 왔는지가
+/// 한눈에 안 보이면 "제안 = 완료"로 읽힌다.
 class AdminDispatchScreen extends ConsumerWidget {
   const AdminDispatchScreen({super.key});
+
+  /// 좁은 화면에서 지도에 내주는 높이.
+  static const _mapPreviewHeight = 320.0;
+
+  /// 노선 카드 한 장의 대략 높이 — 자리표시자가 실제와 어긋나면 화면이 튄다.
+  static const _cardHeight = 132.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -45,6 +58,9 @@ class AdminDispatchScreen extends ConsumerWidget {
             value: dispatch,
             onRetry: () =>
                 ref.read(adminDispatchControllerProvider.notifier).propose(),
+            // 제안 계산은 몇 초씩 걸린다 — 스피너보다 "무엇이 나타날지"를 보여준다(§6).
+            loading: () =>
+                const SkeletonList(itemCount: 3, itemHeight: _cardHeight),
             data: (state) => switch (state.stage) {
               DispatchStage.idle => const EmptyView(
                 icon: Icons.alt_route_outlined,
@@ -77,36 +93,83 @@ class _DispatchHeader extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.md),
-      child: Wrap(
-        spacing: AppSpacing.md,
-        runSpacing: AppSpacing.sm,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AdminTenantBadge(tenant: tenant),
-          SegmentedButton<RouteDirection>(
-            segments: [
-              for (final d in RouteDirection.values)
-                ButtonSegment(value: d, label: Text(d.label)),
+          _StageSteps(stage: state?.stage ?? DispatchStage.idle),
+          const SizedBox(height: AppSpacing.smd),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              AdminTenantBadge(tenant: tenant),
+              SegmentedButton<RouteDirection>(
+                segments: [
+                  for (final d in RouteDirection.values)
+                    ButtonSegment(value: d, label: Text(d.label)),
+                ],
+                selected: {state?.direction ?? RouteDirection.pickup},
+                onSelectionChanged: isBusy
+                    ? null
+                    : (selection) => ref
+                          .read(adminDispatchControllerProvider.notifier)
+                          .selectDirection(selection.first),
+              ),
+              _ServiceDateField(
+                serviceDate: state?.serviceDate,
+                enabled: !isBusy,
+              ),
+              FilledButton.icon(
+                onPressed: isBusy
+                    ? null
+                    : () => ref
+                          .read(adminDispatchControllerProvider.notifier)
+                          .propose(),
+                icon: const Icon(Icons.auto_awesome),
+                label: Text(state?.proposal == null ? '제안 받기' : '다시 제안 받기'),
+              ),
             ],
-            selected: {state?.direction ?? RouteDirection.pickup},
-            onSelectionChanged: isBusy
-                ? null
-                : (selection) => ref
-                      .read(adminDispatchControllerProvider.notifier)
-                      .selectDirection(selection.first),
-          ),
-          _ServiceDateField(serviceDate: state?.serviceDate, enabled: !isBusy),
-          FilledButton.icon(
-            onPressed: isBusy
-                ? null
-                : () => ref
-                      .read(adminDispatchControllerProvider.notifier)
-                      .propose(),
-            icon: const Icon(Icons.auto_awesome),
-            label: Text(state?.proposal == null ? '제안 받기' : '다시 제안 받기'),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 제안 → 검토 → 확정. **지금 어느 단계인지**만 알려주는 표시라 눌리지 않는다.
+class _StageSteps extends StatelessWidget {
+  const _StageSteps({required this.stage});
+
+  final DispatchStage stage;
+
+  static const _labels = ['1 제안', '2 검토', '3 확정'];
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final current = switch (stage) {
+      DispatchStage.idle => 0,
+      DispatchStage.review => 1,
+      DispatchStage.confirmed => 2,
+    };
+
+    return Wrap(
+      spacing: AppSpacing.xs,
+      runSpacing: AppSpacing.xs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        for (var i = 0; i < _labels.length; i++) ...[
+          if (i > 0)
+            Icon(Icons.chevron_right, size: 16, color: scheme.onSurfaceVariant),
+          AppTag(
+            label: _labels[i],
+            tone: i <= current ? AppTone.primary : AppTone.neutral,
+            // 지금 단계만 진하게 — 지나온 단계와 앞으로 올 단계를 셋 다 구분한다.
+            filled: i == current,
+          ),
+        ],
+      ],
     );
   }
 }
@@ -152,6 +215,9 @@ class _ReviewView extends StatelessWidget {
 
   final AdminDispatchState state;
 
+  /// 검토 패널 폭. 노선 카드 한 장이 접히지 않고 들어가는 최소치다.
+  static const _panelWidth = 420.0;
+
   @override
   Widget build(BuildContext context) {
     final proposal = state.proposal;
@@ -167,7 +233,7 @@ class _ReviewView extends StatelessWidget {
         children: [
           panel,
           const SizedBox(height: AppSpacing.md),
-          SizedBox(height: 320, child: map),
+          SizedBox(height: AdminDispatchScreen._mapPreviewHeight, child: map),
         ],
       );
     }
@@ -175,7 +241,7 @@ class _ReviewView extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 420,
+          width: _panelWidth,
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(AppSpacing.md),
             child: panel,
@@ -209,7 +275,7 @@ class _ReviewPanel extends ConsumerWidget {
         const SizedBox(height: AppSpacing.md),
 
         if (proposal.isEmpty)
-          Text('배정할 학생이 없어 만들어진 계획이 없습니다.', style: theme.textTheme.bodyMedium)
+          Text('배정할 학생이 없어 만들어진 계획이 없습니다.', style: theme.textTheme.bodyLarge)
         else ...[
           Text(
             '버스 ${proposal.plans.length}대 · 배정 학생 ${proposal.totalStops}명',
@@ -225,15 +291,19 @@ class _ReviewPanel extends ConsumerWidget {
         if (state.alreadyConfirmed)
           const _AlreadyConfirmedNotice()
         else
-          FilledButton.icon(
+          // 화면당 하나뿐인 주요 동작이라 56dp(§3.3). **되돌릴 수 없는 동작**이라
+          // 검토 단계를 거치지 않고는 여기까지 오지 못한다.
+          AppActionButton(
+            icon: '✓',
+            label: '이대로 확정하기',
+            tone: AppTone.primary,
+            primaryAction: true,
             // 확정 가능한 계획이 없으면 눌러도 서버가 거절한다 — 아예 막는다.
             onPressed: state.canConfirm
                 ? () => ref
                       .read(adminDispatchControllerProvider.notifier)
                       .confirm()
                 : null,
-            icon: const Icon(Icons.check_circle_outline),
-            label: const Text('이대로 확정하기'),
           ),
       ],
     );
@@ -247,30 +317,25 @@ class _ProposalNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    // 정보 배너는 primaryContainer 다(§1.1) — 경고가 아니라 안내다.
+    final foreground = AppTone.primary.onContainer(context);
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.smd),
       decoration: BoxDecoration(
-        color: scheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+        color: AppTone.primary.container(context),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.info_outline,
-            size: 18,
-            color: scheme.onSecondaryContainer,
-          ),
+          Icon(Icons.info_outline, size: 18, color: foreground),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               '아래는 아직 "제안"입니다. 학생 배정은 바뀌지 않았고 기사에게도 보이지 않습니다. '
               '확정을 눌러야 배정·승인·배포가 한 번에 처리됩니다.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSecondaryContainer,
-              ),
+              style: theme.textTheme.bodySmall?.copyWith(color: foreground),
             ),
           ),
         ],
@@ -286,20 +351,19 @@ class _AlreadyConfirmedNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          padding: const EdgeInsets.all(AppSpacing.sm),
+          padding: const EdgeInsets.all(AppSpacing.smd),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+            color: theme.colorScheme.surfaceContainer,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           ),
           child: Text(
             '이미 확정된 계획입니다. 노선 목록에서 현재 상태를 확인해 주세요.',
-            style: theme.textTheme.bodyMedium,
+            style: theme.textTheme.bodyLarge,
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
@@ -328,10 +392,12 @@ class _ConfirmedView extends ConsumerWidget {
       padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(
               Icons.check_circle,
-              color: theme.colorScheme.primary,
+              // 끝났다는 뜻이라 success 다 — 파랑은 "진행 중"으로 읽힌다(§4).
+              color: AppTone.success.solid(context),
               size: 28,
             ),
             const SizedBox(width: AppSpacing.sm),
@@ -354,7 +420,10 @@ class _ConfirmedView extends ConsumerWidget {
         for (final plan in state.confirmed) RoutePlanCard(plan: plan),
 
         const SizedBox(height: AppSpacing.md),
-        SizedBox(height: 320, child: RoutePlanMap(plans: state.confirmed)),
+        SizedBox(
+          height: AdminDispatchScreen._mapPreviewHeight,
+          child: RoutePlanMap(plans: state.confirmed),
+        ),
         const SizedBox(height: AppSpacing.md),
         Wrap(
           spacing: AppSpacing.sm,

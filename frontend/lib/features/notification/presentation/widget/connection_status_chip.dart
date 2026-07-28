@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../core/ui/app_status_chip.dart';
+import '../../../../core/ui/app_tone.dart';
 import '../../../../core/ws/spec/stomp_gateway.dart';
 
 /// 실시간 연결 상태 표시.
@@ -21,14 +23,17 @@ class ConnectionStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    // 색은 전부 테마 스킴에서 가져온다 — 화면에서 색을 새로 만들지 않는다(컨벤션 §8).
-    final (label, color) = switch (connection.status) {
-      StompConnectionStatus.connected => ('실시간 연결됨', scheme.primary),
-      StompConnectionStatus.connecting => ('연결 중', scheme.onSurfaceVariant),
-      StompConnectionStatus.reconnecting => ('재연결 중', scheme.tertiary),
-      StompConnectionStatus.disconnected => ('연결 끊김', scheme.error),
+    // 색은 의미 톤으로만 고른다 — 화면에서 색을 새로 만들지 않는다(§5.1).
+    // 아이콘 문자를 같이 내는 건 색만으로 상태를 구분하지 않기 위해서다(§0-1).
+    final (
+      String icon,
+      String label,
+      AppTone tone,
+    ) = switch (connection.status) {
+      StompConnectionStatus.connected => ('◉', '실시간 연결됨', AppTone.primary),
+      StompConnectionStatus.connecting => ('◌', '연결 중', AppTone.neutral),
+      StompConnectionStatus.reconnecting => ('↻', '재연결 중', AppTone.warning),
+      StompConnectionStatus.disconnected => ('✕', '연결 끊김', AppTone.error),
     };
     final showRetry =
         onReconnect != null &&
@@ -37,16 +42,13 @@ class ConnectionStatusChip extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: AppSpacing.sm,
-          height: AppSpacing.sm,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Text(
+        AppStatusChip(
+          icon: icon,
           // 끊긴 사유가 있으면 함께 보여준다. 없으면 상태 이름만.
-          connection.message == null ? label : '$label · ${connection.message}',
-          style: theme.textTheme.bodySmall?.copyWith(color: color),
+          label: connection.message == null
+              ? label
+              : '$label · ${connection.message}',
+          tone: tone,
         ),
         if (showRetry) ...[
           const SizedBox(width: AppSpacing.sm),

@@ -250,7 +250,10 @@ class _SendingLabel extends StatelessWidget {
           child: CircularProgressIndicator(strokeWidth: 2, color: color),
         ),
         const SizedBox(width: AppSpacing.xs),
-        Text('전송 중', style: theme.textTheme.labelMedium?.copyWith(color: color)),
+        Text(
+          '전송 중',
+          style: theme.textTheme.labelMedium?.copyWith(color: color),
+        ),
       ],
     );
   }

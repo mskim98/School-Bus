@@ -2,9 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../core/ui/app_status_chip.dart';
+import '../../../../core/ui/app_tone.dart';
 import '../../../../core/ui/async_section.dart';
 import '../../../../core/ui/empty_view.dart';
 import '../../../../core/ui/error_message.dart';
+import '../../../../core/ui/offline_banner.dart';
+import '../../../../core/ui/skeleton_box.dart';
+import '../../../../core/ws/spec/stomp_gateway.dart';
 import '../../application/notification_feed_controller.dart';
 import '../widget/connection_status_chip.dart';
 import '../widget/notification_tile.dart';
@@ -22,6 +27,9 @@ class AdminNotificationScreen extends ConsumerWidget {
   /// 데스크톱에서 목록이 화면 폭 전체로 늘어나면 눈이 줄을 따라가지 못한다.
   static const _maxContentWidth = 880.0;
 
+  /// 알림 한 줄의 대략 높이 — 로딩 자리표시자가 실제 목록과 어긋나면 화면이 튄다.
+  static const _tileHeight = 84.0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final feed = ref.watch(notificationFeedControllerProvider);
@@ -37,6 +45,13 @@ class AdminNotificationScreen extends ConsumerWidget {
           child: AsyncSection<NotificationFeedState>(
             value: feed,
             onRetry: controller.refresh,
+            loading: () => const SkeletonList(
+              itemCount: 5,
+              itemHeight: _tileHeight,
+              // 툴바 자리를 미리 잡아 둔다 — 로딩이 끝날 때 목록이 아래로 밀리지 않게.
+              header: AppTouch.min,
+              padding: EdgeInsets.zero,
+            ),
             data: (state) => _FeedBody(state: state, controller: controller),
           ),
         ),
@@ -53,12 +68,20 @@ class _FeedBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isOffline =
+        state.connection.status == StompConnectionStatus.disconnected;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _Toolbar(state: state, controller: controller),
         const SizedBox(height: AppSpacing.md),
-        // 실시간 스트림만 깨진 경우 — 이미 받은 목록은 그대로 두고 배너로만 알린다.
+        // ⚠️ 실시간이 끊겼다고 화면을 덮지 않는다 — 이미 받아둔 알림까지 못 보게 되면
+        // 그게 회귀다. 목록은 그대로 두고 위에 사실만 알린다(§6 오프라인).
+        if (isOffline) ...[
+          const OfflineBanner(message: '실시간 연결이 끊겼습니다 · 새 알림이 바로 뜨지 않을 수 있습니다'),
+          const SizedBox(height: AppSpacing.md),
+        ],
         if (state.liveError != null) ...[
           ErrorBanner(error: state.liveError!, onRetry: controller.refresh),
           const SizedBox(height: AppSpacing.md),
@@ -87,10 +110,8 @@ class _Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Wrap(
-      spacing: AppSpacing.md,
+      spacing: AppSpacing.sm,
       runSpacing: AppSpacing.sm,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
@@ -98,15 +119,13 @@ class _Toolbar extends StatelessWidget {
           connection: state.connection,
           onReconnect: controller.refresh,
         ),
-        if (state.tenantId != null)
-          Text(
-            state.isTenantPinned
-                // 플랫폼 관리자는 소속 학원이 없어 한 곳으로 고정해 둔 상태다(계획서 §8 D3).
-                // 고정값이라는 사실을 숨기면 "왜 다른 학원이 안 보이지"로 오해한다.
-                ? '학원 ${state.tenantId} (고정)'
-                : '학원 ${state.tenantId}',
-            style: theme.textTheme.bodySmall,
-          ),
+        if (state.tenantId != null) ...[
+          AppTag(label: '학원 #${state.tenantId}', tone: AppTone.neutral),
+          // 플랫폼 관리자는 소속 학원이 없어 한 곳으로 고정해 둔 상태다(계획서 §8 D3).
+          // 고정값이라는 사실을 숨기면 "왜 다른 학원이 안 보이지"로 오해한다.
+          if (state.isTenantPinned)
+            const AppTag(label: '고정값', tone: AppTone.warning),
+        ],
         TextButton.icon(
           onPressed: controller.refresh,
           icon: const Icon(Icons.refresh, size: 18),

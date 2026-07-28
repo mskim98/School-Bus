@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/map/spec/map_view_adapter.dart';
+import '../../../../core/ui/app_status_chip.dart';
+import '../../../../core/ui/app_tone.dart';
 import '../../../../core/ui/async_section.dart';
 import '../../../../core/ui/empty_view.dart';
+import '../../../../core/ui/skeleton_box.dart';
 import '../../application/bus_monitor_controller.dart';
 import '../widget/monitored_bus_tile.dart';
 
@@ -14,8 +18,8 @@ import '../widget/monitored_bus_tile.dart';
 /// 버스는 REST 폴링이 유일한 경로다(계획서 §3.6). 주기는
 /// [BusMonitorController.pollInterval] 한 곳에서만 정한다.
 ///
-/// 관리자는 데스크톱에서 보므로 넓은 화면에서는 지도에 가로 폭을 몰아주고
-/// 버스 목록을 옆에 세운다.
+/// 넓은 화면에서는 **좌측 목록 + 우측 지도**다(디자인 시스템 §10). 목록이 먼저
+/// 읽히는 순서라 "어느 버스를 볼지 고른 뒤 지도를 본다"는 동선과 맞는다.
 class AdminMonitorScreen extends ConsumerStatefulWidget {
   const AdminMonitorScreen({super.key});
 
@@ -28,8 +32,15 @@ class _AdminMonitorScreenState extends ConsumerState<AdminMonitorScreen>
   /// 목록 패널 폭. 지도가 주인공이라 목록은 읽을 수 있는 최소치만 가져간다.
   static const _sidePanelWidth = 320.0;
 
+  /// 아주 넓은 화면(§3 `AppBreakpoints.expanded`)에서만 한 단 넓힌다.
+  /// 데스크톱에서 새로 정하는 건 **행 밀도뿐**이라 폭도 이 한 단계만 둔다(§10).
+  static const _sidePanelWidthWide = 380.0;
+
   /// 좁은 화면에서 지도 아래에 두는 목록 높이.
   static const _bottomPanelHeight = 220.0;
+
+  /// 관제 목록 한 줄의 대략 높이 — 자리표시자가 실제와 어긋나면 화면이 튄다.
+  static const _tileHeight = 96.0;
 
   @override
   void initState() {
@@ -61,6 +72,12 @@ class _AdminMonitorScreenState extends ConsumerState<AdminMonitorScreen>
     return AsyncSection<BusMonitorState>(
       value: monitor,
       loadingLabel: '버스 위치를 불러오는 중',
+      // 전체화면 스피너 대신 스켈레톤(§6). 지도 자리도 같이 잡아 둔다.
+      loading: () => const SkeletonList(
+        itemCount: 3,
+        itemHeight: _tileHeight,
+        header: _bottomPanelHeight,
+      ),
       onRetry: () => ref.read(busMonitorControllerProvider.notifier).refresh(),
       data: _buildMonitor,
     );
@@ -68,7 +85,8 @@ class _AdminMonitorScreenState extends ConsumerState<AdminMonitorScreen>
 
   Widget _buildMonitor(BusMonitorState state) {
     final now = DateTime.now();
-    final isWide = MediaQuery.sizeOf(context).width >= AppBreakpoints.compact;
+    final width = MediaQuery.sizeOf(context).width;
+    final isWide = width >= AppBreakpoints.compact;
 
     final map = _MapPanel(state: state);
     final list = _BusListPanel(state: state, now: now);
@@ -82,9 +100,14 @@ class _AdminMonitorScreenState extends ConsumerState<AdminMonitorScreen>
           child: isWide
               ? Row(
                   children: [
-                    Expanded(child: map),
+                    SizedBox(
+                      width: width >= AppBreakpoints.expanded
+                          ? _sidePanelWidthWide
+                          : _sidePanelWidth,
+                      child: list,
+                    ),
                     const VerticalDivider(width: 1),
-                    SizedBox(width: _sidePanelWidth, child: list),
+                    Expanded(child: map),
                   ],
                 )
               : Column(
@@ -130,16 +153,20 @@ class _MapPanel extends ConsumerWidget {
         ),
     ];
 
-    if (markers.isEmpty) {
-      // 버스는 등록돼 있는데 아직 아무도 좌표를 보내지 않은 상태 — 관리자가 할 일은
-      // 기사 쪽 위치 전송을 켜는 것이므로, 목록의 "등록된 버스가 없습니다"와 구분한다.
-      return const EmptyView(
-        icon: Icons.location_searching,
-        title: '아직 위치를 보고한 버스가 없습니다',
-        description: '기사 앱에서 위치 전송을 켜면 이곳에 표시됩니다.',
-      );
-    }
-    return adapter.build(markers: markers);
+    // 지도 자리는 비어 있을 때도 **지도 색**으로 남긴다(§5.3) — 표면색으로 칠하면
+    // 카드처럼 보여서 "여기가 지도"라는 인지가 깨진다.
+    return ColoredBox(
+      color: context.appColors.mapBase,
+      child: markers.isEmpty
+          // 버스는 등록돼 있는데 아직 아무도 좌표를 보내지 않은 상태 — 관리자가 할 일은
+          // 기사 쪽 위치 전송을 켜는 것이므로, 목록의 "등록된 버스가 없습니다"와 구분한다.
+          ? const EmptyView(
+              icon: Icons.location_searching,
+              title: '아직 위치를 보고한 버스가 없습니다',
+              description: '기사 앱에서 위치 전송을 켜면 이곳에 표시됩니다.',
+            )
+          : adapter.build(markers: markers),
+    );
   }
 }
 
@@ -186,8 +213,10 @@ class _MonitorHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final controller = ref.read(busMonitorControllerProvider.notifier);
     final seconds = BusMonitorController.pollInterval.inSeconds;
+    final paused = state.pausedByLifecycle;
 
     return Container(
       width: double.infinity,
@@ -195,35 +224,36 @@ class _MonitorHeader extends ConsumerWidget {
         horizontal: AppSpacing.md,
         vertical: AppSpacing.sm,
       ),
-      color: theme.colorScheme.surfaceContainerHighest,
+      decoration: BoxDecoration(
+        // 카드·툴바 표면(§1.1). 아래로 1px 선을 그어 지도와 경계를 만든다.
+        color: scheme.surfaceContainer,
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
       child: Wrap(
         spacing: AppSpacing.sm,
-        runSpacing: AppSpacing.xs,
+        runSpacing: AppSpacing.sm,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Text(
             '버스 ${state.buses.length}대 · 위치 수신 ${state.positionedCount}대',
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+            style: theme.textTheme.titleSmall,
           ),
-          _HeaderChip(
-            icon: state.pausedByLifecycle ? Icons.pause : Icons.autorenew,
-            label: state.pausedByLifecycle ? '갱신 일시중지' : '$seconds초마다 갱신',
+          // 갱신이 멈춰 있다는 건 "화면이 지금을 안 보여준다"는 뜻이라 주의 톤이다.
+          AppStatusChip(
+            icon: paused ? '⏸' : '↻',
+            label: paused ? '갱신 일시중지' : '$seconds초마다 갱신',
+            tone: paused ? AppTone.warning : AppTone.neutral,
           ),
           // 플랫폼 관리자는 소속 학원이 없어 고정값을 쓴다 — 다른 학원을 보고 있다고
           // 오해하지 않도록 화면에 명시한다(계획서 §8 D3).
-          _HeaderChip(
-            icon: Icons.apartment,
-            label: state.isTenantFallback
-                ? '학원 #${state.tenantId} (고정값)'
-                : '학원 #${state.tenantId}',
-          ),
+          AppTag(label: '학원 #${state.tenantId}', tone: AppTone.neutral),
+          if (state.isTenantFallback)
+            const AppTag(label: '고정값', tone: AppTone.warning),
           if (state.selectedBusId != null)
-            ActionChip(
-              avatar: const Icon(Icons.zoom_out_map, size: 16),
-              label: const Text('전체 보기'),
+            OutlinedButton.icon(
               onPressed: () => controller.select(null),
+              icon: const Icon(Icons.zoom_out_map, size: 18),
+              label: const Text('전체 보기'),
             ),
           IconButton(
             tooltip: '전체 새로고침',
@@ -232,29 +262,6 @@ class _MonitorHeader extends ConsumerWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _HeaderChip extends StatelessWidget {
-  const _HeaderChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: theme.hintColor),
-        const SizedBox(width: AppSpacing.xs),
-        Text(
-          label,
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
-        ),
-      ],
     );
   }
 }
@@ -268,23 +275,26 @@ class _PollWarning extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final foreground = AppTone.error.onContainer(context);
+
     return Container(
       width: double.infinity,
-      color: scheme.errorContainer,
+      color: AppTone.error.container(context),
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
-        vertical: AppSpacing.xs,
+        vertical: AppSpacing.sm,
       ),
       child: Row(
         children: [
-          Icon(Icons.sync_problem, size: 16, color: scheme.onErrorContainer),
+          Icon(Icons.sync_problem, size: 18, color: foreground),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               // 서버가 준 문구를 그대로 쓴다(컨벤션 §7-2).
               '$message — 마지막으로 받은 위치를 표시하고 있습니다',
-              style: TextStyle(color: scheme.onErrorContainer),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: foreground),
             ),
           ),
         ],

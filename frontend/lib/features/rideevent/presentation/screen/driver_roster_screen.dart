@@ -68,11 +68,8 @@ class _RosterView extends ConsumerWidget {
             loadingLabel: '명단을 불러오는 중',
             // 스피너 대신 스켈레톤 — 곧 무엇이 어디 나타날지 미리 보여줘야
             // 명단이 뜬 뒤에 눈이 화면을 다시 훑지 않는다(§6).
-            loading: () => const SkeletonList(
-              header: 76,
-              itemCount: 3,
-              itemHeight: 96,
-            ),
+            loading: () =>
+                const SkeletonList(header: 76, itemCount: 3, itemHeight: 96),
             data: (state) => _RosterList(state: state),
           ),
         ),
