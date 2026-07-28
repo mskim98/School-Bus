@@ -81,53 +81,33 @@
 
 ---
 
-## 2. 폴더 구조
+## 2. 폴더 구조 · 코드 컨벤션
 
-백엔드 모듈명과 **1:1로 맞춘 feature-first 구조**를 쓴다. "이 화면이 어느 백엔드 모듈을 부르는지"를 폴더만 봐도 알 수 있게 하기 위함이다.
+> **이 절의 상세는 별도 문서로 분리했다 → [`FLUTTER_CODE_CONVENTIONS.md`](FLUTTER_CODE_CONVENTIONS.md)**
+> 폴더 레이아웃 · 계층 규칙 · DTO/domain 분리 기준 · Port(spec/impl) 규칙 · 네이밍 · 금지사항 ·
+> **에이전트용 컨벤션 검사 체크리스트(§9)** 가 전부 거기 있다. 코드를 쓰기 전에 그 문서를 먼저 읽는다.
+
+요약만 옮기면:
+
+- **feature 이름 = 백엔드 모듈명**(`auth`·`location`·`rideevent`·`routing`·`notification`) — 화면이 어느 백엔드 모듈을 부르는지 폴더만 보고 알 수 있게
+- **계층 대응**: `presentation/`=Controller · `application/`=Service · `data/`=Repository · `core/`=Infrastructure
+- **단방향 의존**: `presentation → application → data → core`. 화면이 `dio`를 import 하면 그 자체로 위반
+- **Port는 교체 가능성이 있는 것만**(백엔드 `reference.md` §2와 같은 기준) — `LocationSource` · `MapViewAdapter` · `TokenStorage` · `StompGateway` 4개
 
 ```
 frontend/
-├── Dockerfile                  # 멀티스테이지: flutter build web → nginx
-├── nginx.conf                  # SPA fallback (go_router 딥링크용)
+├── Dockerfile · nginx.conf · .dockerignore   # Flutter Web → nginx (§5)
 ├── pubspec.yaml
 ├── docs/
-│   └── FLUTTER_FRONTEND_PLAN.md    # ← 이 문서
+│   ├── FLUTTER_FRONTEND_PLAN.md      # ← 이 문서 (무엇을 만드는가)
+│   └── FLUTTER_CODE_CONVENTIONS.md   # 어떻게 쓰는가 + 검사 체크리스트
 └── lib/
-    ├── main.dart
-    ├── app/                    # 앱 셸
-    │   ├── router.dart         # go_router + 역할별 redirect 가드
-    │   ├── theme.dart
-    │   └── layout.dart         # 반응형 셸(모바일=기사 / 데스크톱=관리자)
-    ├── core/
-    │   ├── api/
-    │   │   ├── api_client.dart     # dio 인스턴스 + baseUrl
-    │   │   ├── api_response.dart   # ApiResponse<T> 언랩
-    │   │   ├── auth_interceptor.dart   # Bearer 부착 + 401 → refresh 재시도
-    │   │   └── api_exception.dart      # HTTP status → 앱 예외 매핑
-    │   ├── ws/
-    │   │   └── stomp_service.dart  # 연결·구독·재연결
-    │   ├── storage/
-    │   │   └── token_storage.dart  # accessToken/refreshToken 보관
-    │   └── map/
-    │       ├── map_adapter.dart        # 포트(추상)
-    │       └── flutter_map_adapter.dart # 구현체
-    └── features/
-        ├── auth/               # 로그인, 토큰, 역할 판별
-        ├── location/           # 버스 실시간 위치(F1)
-        ├── rideevent/          # 승하차 기록/조회
-        ├── routing/            # 배차 제안·확정·노선 조회(F4)
-        └── notification/       # 알림함 + 실시간 수신
+    ├── main.dart · bootstrap.dart
+    ├── app/{router,theme}/
+    ├── core/{api,ws,storage,map,location,ui,util}/
+    ├── features/<모듈>/{data/dto,domain,application,presentation/{screen,widget}}/
+    └── shared/domain/
 ```
-
-각 `features/<module>/` 내부는 3계층으로 나눈다 — **백엔드의 Controller/Service/Repository와 대응**한다:
-
-| 폴더 | 역할 | 백엔드 대응 |
-|---|---|---|
-| `data/` | DTO(freezed) + Repository(dio 호출) | Repository |
-| `application/` | Riverpod provider/notifier — 상태·비즈니스 흐름 | Service |
-| `presentation/` | Screen · Widget | Controller + View |
-
----
 
 ## 3. 백엔드 연동 규약 — ⚠️ 함정 모음
 
@@ -345,9 +325,14 @@ server {
     - 권한 경계: ADMIN→403 · STUDENT→403 · 미인증→401 · `GET /api/buses`(관리자)는 여전히 200
       → 메서드 레벨 `@PreAuthorize`가 클래스 레벨을 의도대로 덮어쓰고, 기존 관리자 API는 영향 없음
     - Swagger `"00. MVP 사용 API"` 그룹 `/v3/api-docs` 실측 **18개**(`/api/buses/me` 포함) — 명세서와 일치
-- [ ] ⛔ **C1** Flutter 프로젝트 생성(`flutter create`) + `pubspec.yaml` 의존성 + §2 폴더 골격
-  - **블록: 로컬에 Flutter SDK 미설치** (§9 환경 참조). 설치 전엔 `flutter create`·`pub get`·`analyze` 어느 것도 실행 불가
-  - 검증: `flutter analyze` 무경고, `flutter run -d chrome` 기본 화면 표시
+- [x] ✅ **C1** Flutter 프로젝트 생성 + 의존성 + 폴더 골격 + **코드 컨벤션 문서**
+  - Flutter 3.44.8 / `school_bus` / `--platforms=web,android,ios --empty`
+  - `FLUTTER_CODE_CONVENTIONS.md` 신설 — 계층·Port·DTO 규칙 + 에이전트용 검사 체크리스트(§9)
+  - `lib/` 구조: `main.dart`(1줄) → `bootstrap.dart`(초기화·전역 에러핸들러) → `app/app.dart`(셸)
+    + `app/theme/`(`AppTheme`·`AppSpacing`·`AppBreakpoints`) + `core/api/api_config.dart`
+  - ⚠️ **`riverpod_annotation`/`riverpod_generator` 제외** — Flutter 3.44.8 번들 analyzer와 버전 충돌.
+    Provider는 손으로 선언한다(입문 단계엔 오히려 마법이 적어 유리). 코드생성은 freezed/json_serializable만
+  - **검증**: `flutter analyze` 무경고 · `dart format` 적용 · `flutter build web --release` 성공(`main.dart.js` 2.1MB)
 - [ ] 🟡 **C2** `Dockerfile` + `nginx.conf` + `docker-compose.yml` frontend 서비스 갱신(§5)
   - ✅ 작성 완료: `frontend/Dockerfile`(멀티스테이지, `API_BASE_URL` build-arg) · `frontend/nginx.conf`(SPA fallback + 캐시 정책) · `frontend/.dockerignore`
   - ⏳ 남음: `docker-compose.yml`의 frontend 서비스 갱신 — **C1 완료 후에 한다.**
@@ -396,12 +381,13 @@ server {
 > **한 항목(C*)을 끝낼 때마다 §6 체크박스와 이 절을 갱신하고 커밋한다.** 다음 세션은 이 문서만 읽고 이어간다.
 > 항목을 마치지 않은 채 다음으로 넘어가지 않는다.
 
-- **마지막 완료 항목**: **C0 완전 검증 완료** — 백엔드 `GET /api/buses/me` (단위테스트 100/100 + 실호출 + 권한경계 4건 + Swagger 18개)
-- **현재 진행 중**: **C2 일부** — Docker 산출물 3개 작성 완료, compose 갱신은 C1 이후로 보류
-- **다음 할 일**: **⛔ C1 — Flutter SDK 설치 대기 중** (§9). 설치되면 `flutter create` → 의존성 → 폴더 골격
-- **인프라 상태**: `docker compose up -d --build` 완료 — postgres(healthy)·redis·kafka·backend 4개 기동 중.
-  중단됐다면 §9의 PATH를 잡고 다시 올릴 것(볼륨이 없어 `down` 후 `up`이면 시드 상태로 리셋된다)
-- **남은 검증**: `docker compose up` 후 `localhost:3000` 접속 (C2 — C1 완료가 선행)
+- **마지막 완료 항목**: **C1** — Flutter 프로젝트 + 의존성 + 폴더 골격 + `FLUTTER_CODE_CONVENTIONS.md`
+- **다음 할 일**: **C2 마무리** — `docker-compose.yml`의 frontend 서비스 갱신(`profiles` 제거, `"3000:80"`) → `docker compose up -d --build` → `localhost:3000` 접속 확인
+- **그 다음**: C3(ApiResponse·dio·예외 매핑) → C4(로그인·JWT·refresh) → C5(라우터·역할가드)
+- **인프라 상태**: postgres(healthy)·redis·kafka·backend 4개 기동 중.
+  꺼졌다면 §9의 PATH를 잡고 `docker compose up -d --build`(볼륨이 없어 `down` 후 `up`이면 시드 상태로 리셋된다)
+- **에이전트 활용**: 화면 작업(C6~C11)은 feature 단위로 병렬화 가능 — 에이전트에 `FLUTTER_CODE_CONVENTIONS.md` 준수를 명시하고,
+  완료 후 `convention-auditor`로 §9 체크리스트 검사를 돌린다(사용자 요청, 2026-07-28)
 - **환경 메모**: Docker(postgres/redis/kafka/backend)는 **사용자가 직접 켠다** — 필요할 때 요청할 것
 
 ---
