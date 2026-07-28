@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../core/ui/app_status_chip.dart';
+import '../../../../core/ui/app_tone.dart';
 import '../../domain/route_plan.dart';
 
-/// 정차 순서 목록의 한 줄.
+/// 정차 순서 목록의 한 장(`docs/DESIGN_SYSTEM.md` §5.2).
+///
+/// 세 상태를 **한 장에서만** 구분한다 — 다음 정차 / 예정 / 완료. 목록에서 진하게
+/// 튀는 카드가 하나뿐이어야 운전 중 1초 안에 "다음에 갈 곳"이 읽힌다.
 ///
 /// ⚠️ **학생 이름을 아직 못 보여준다.** 노선 API(`stops[]`)는 `studentId` 만 주고
 /// 이름은 운행 세션 명단에서만 온다(계획서 §3.11). C7 에서 운행 세션을 붙이면
@@ -14,6 +19,7 @@ class RouteStopTile extends StatelessWidget {
     required this.stop,
     this.isNext = false,
     this.isLast = false,
+    this.isDone = false,
     this.studentName,
   });
 
@@ -24,6 +30,9 @@ class RouteStopTile extends StatelessWidget {
 
   final bool isLast;
 
+  /// 이미 지나온 정차. 지우지 않고 흐리게 남긴다 — 순서를 되짚을 수 있어야 한다.
+  final bool isDone;
+
   /// C7 에서 운행 세션 명단이 붙으면 채워진다.
   final String? studentName;
 
@@ -32,11 +41,21 @@ class RouteStopTile extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return Container(
-      color: isNext ? scheme.primaryContainer.withValues(alpha: 0.35) : null,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
+    // 다음 정차만 primaryContainer 로 올린다. 나머지는 카드 표면색으로 눕힌다.
+    final tone = isNext ? AppTone.primary : AppTone.neutral;
+    final background = isNext
+        ? scheme.primaryContainer
+        : scheme.surfaceContainer;
+    final foreground = isNext ? scheme.onPrimaryContainer : scheme.onSurface;
+    final subForeground = isNext
+        ? scheme.onPrimaryContainer
+        : scheme.onSurfaceVariant;
+
+    final card = Container(
+      padding: const EdgeInsets.all(AppSpacing.smd),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       ),
       child: Row(
         children: [
@@ -46,18 +65,20 @@ class RouteStopTile extends StatelessWidget {
             height: 32,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: isNext ? scheme.primary : scheme.secondaryContainer,
+              color: isNext ? tone.solid(context) : tone.container(context),
               shape: BoxShape.circle,
             ),
             child: Text(
               '${stop.seq}',
-              style: TextStyle(
-                color: isNext ? scheme.onPrimary : scheme.onSecondaryContainer,
-                fontWeight: FontWeight.bold,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: isNext
+                    ? tone.onSolid(context)
+                    : tone.onContainer(context),
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ),
-          const SizedBox(width: AppSpacing.md),
+          const SizedBox(width: AppSpacing.smd),
 
           Expanded(
             child: Column(
@@ -65,39 +86,46 @@ class RouteStopTile extends StatelessWidget {
               children: [
                 Text(
                   studentName ?? '학생 #${stop.studentId}',
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    fontWeight: isNext ? FontWeight.w700 : FontWeight.w500,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: foreground,
                   ),
                 ),
-                if (isNext)
-                  Text(
-                    '다음 정차',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  )
-                else if (isLast)
-                  Text(
-                    '마지막 정차',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.hintColor,
-                    ),
-                  ),
+                const SizedBox(height: AppSpacing.xs),
+                // 글자 200% 확대에서도 태그가 밀려나지 않게 Wrap 을 쓴다(§7-5).
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    AppTag(label: _stateLabel, tone: tone, filled: isNext),
+                    if (isLast && !isDone)
+                      const AppTag(label: '마지막 정차', tone: AppTone.neutral),
+                  ],
+                ),
               ],
             ),
           ),
+          const SizedBox(width: AppSpacing.smd),
 
-          // ETA 는 서버가 초로 주므로 사람이 읽는 형태로 바꿔 보여준다.
+          // ETA 는 서버가 초로 주므로 사람이 읽는 형태로 바꿔 보여준다(§7-8).
+          // 변환은 도메인(`RouteStop.etaLabel`)에 있다 — 화면마다 다시 만들지 않는다.
           Text(
-            stop.etaLabel,
+            isDone ? '—' : stop.etaLabel,
             style: theme.textTheme.titleSmall?.copyWith(
-              color: isNext ? scheme.primary : theme.hintColor,
-              fontWeight: FontWeight.w600,
+              color: isNext ? foreground : subForeground,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],
       ),
     );
+
+    return isDone ? Opacity(opacity: 0.6, child: card) : card;
+  }
+
+  /// 태그 문구는 세 가지뿐이다(시안 `stopList.tag`). 화면에서 새로 짓지 않는다.
+  String get _stateLabel {
+    if (isDone) return '완료';
+    return isNext ? '다음 정차' : '예정';
   }
 }

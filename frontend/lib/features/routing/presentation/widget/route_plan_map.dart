@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/map/spec/map_view_adapter.dart';
 import '../../domain/route_plan.dart';
@@ -60,11 +61,15 @@ class _MapPlaceholder extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       alignment: Alignment.center,
-      color: theme.colorScheme.surfaceContainerHighest,
+      // 지도 자리는 표면색을 쓰지 않는다 — 카드처럼 보이면 "여기가 지도"라는
+      // 인지가 깨진다(디자인 시스템 §1.3·§5.3).
+      color: context.appColors.mapBase,
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Text(
         message,
-        style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor),
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
