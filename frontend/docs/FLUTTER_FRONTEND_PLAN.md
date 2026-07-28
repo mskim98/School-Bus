@@ -1,0 +1,437 @@
+# FLUTTER_FRONTEND_PLAN — 프론트엔드 단일 소스(SoT)
+
+> **문서 성격**: 프론트엔드(Flutter) 작업의 **단일 소스**다. 프론트 관련 작업을 시작할 때 **이 문서를 가장 먼저 읽는다.**
+> 백엔드 전체 계획은 `backend/docs/PROJECT_MASTER_PLAN.md`, API 계약은 `backend/docs/MVP_API_SPEC.md`,
+> 백엔드 코드 컨벤션은 `backend/docs/reference.md`를 따른다.
+>
+> **포맷**: Claude가 매 세션 재참조하는 계획·추적 문서이므로 토큰 효율을 위해 **Markdown 유지**
+> (루트 `CLAUDE.md`의 "문서 포맷 규칙" 예외 조항 적용 — HTML 렌더는 만들지 않는다).
+>
+> **작성일**: 2026-07-28 (초안). 진행 상황·설계 변경은 이 문서에 반영한다.
+
+---
+
+## 0. 스코프 (사용자 확정, 2026-07-28)
+
+**MVP 범위까지만 작업한다.** `backend/docs/MVP_RELEASE_TRACKER.md` §0에서 확정한 MVP 대상 사용자 계층을 그대로 따른다.
+
+| 계층 | 포함 | 비고 |
+|---|---|---|
+| `DRIVER` (기사/선탑자) | ✅ | 모바일 레이아웃 — 노선 확인 · 승하차 기록 · 위치 보고 |
+| `ACADEMY_ADMIN` / `PLATFORM_ADMIN` | ✅ | 데스크톱 레이아웃 — 관제 지도 · 배차 · 알림 이력 |
+| `STUDENT` / `PARENT` | ❌ **범위 밖** | API는 이미 있음(`MVP_API_SPEC.md` §4.2·4.3·6.2). MVP 이후 확장 |
+
+**MVP 5개 기능**(트래커 §0) 중 프론트가 그리는 것:
+
+| # | 기능 | 담당 화면 |
+|---|---|---|
+| 1 | 버스 실시간 위치 (F1) | 관리자 관제 지도 + 기사 위치 보고 |
+| 2 | 이벤트 기반 노선 재최적화 (F2) | (백엔드 자동) — 프론트는 갱신된 노선 재조회만 |
+| 3 | 노선 변경 시 기사 배포 (F3) | 기사 알림 수신 → 노선 재조회 |
+| 4 | 배차 최적화 (F4) | 관리자 배차 제안 → 검토 → 확정 |
+| 5 | 학생 승하차 | 기사 승하차 기록 화면 |
+
+**하지 않는 것** — 회원가입 UI, 학생/학부모 앱, 수동 노선 생성(`/generate`), 기록 정정, 개인정보 동의 UI(Phase 8 선행요건), 오프라인 모드.
+
+---
+
+## 1. 기술 스택 결정
+
+### 1.1 결정 요약
+
+| 영역 | 채택 | 이유 |
+|---|---|---|
+| 프레임워크 | **Flutter (stable) / Dart 3** | 사용자 지정 |
+| 빌드 타깃 | **Web(주) + Android/iOS(부)** | §1.2 참조 — Docker로 띄우는 건 Web |
+| 상태관리 | **Riverpod** (`flutter_riverpod` + `riverpod_annotation`) | 보일러플레이트가 Bloc보다 적고, 비동기 상태(`AsyncValue`: loading/data/error)가 내장돼 API 화면에 그대로 맞는다 |
+| 라우팅 | **`go_router`** | 선언형 + `redirect` 훅으로 "역할별 진입 화면 분기 / 미로그인 차단"을 한 곳에서 처리 |
+| HTTP | **`dio`** | interceptor 체인이 있어 JWT 부착·401 자동 refresh를 한 군데로 모을 수 있다 |
+| 모델/직렬화 | **`freezed` + `json_serializable`** | `ApiResponse<T>` 제네릭 언랩을 타입 안전하게 처리 |
+| 토큰 저장 | **`flutter_secure_storage`** | 모바일은 Keychain/Keystore, 웹은 WebCrypto 기반 저장으로 자동 분기 |
+| WebSocket | **`stomp_dart_client`** | 백엔드가 **SockJS 미사용 순수 STOMP**라서 그대로 맞는다 (`MVP_API_SPEC.md` §7.1) |
+| 지도 | **`flutter_map`** (OSM 타일) | §1.3 참조 |
+
+### 1.2 ⚠️ Docker와 Flutter — 반드시 짚고 갈 것
+
+**Docker로 "띄울" 수 있는 건 Flutter Web 빌드뿐이다.** 컨테이너 안에서 Android/iOS 앱을 실행할 방법은 없다
+(빌드는 컨테이너에서 할 수 있지만, 실행은 에뮬레이터/실기기 몫이다).
+
+따라서 이 프로젝트의 구성은:
+
+- **`docker compose up`** → Flutter **Web** 빌드를 nginx가 정적 서빙 (`localhost:3000`) — 기사 화면·관리자 화면 둘 다 브라우저에서 확인 가능
+- **모바일 실기기 확인이 필요할 때** → 같은 코드베이스를 `flutter run`으로 로컬 실행 (Docker 밖)
+
+같은 `lib/`를 공유하므로 코드 이중 관리는 없다. **화면 레이아웃만 반응형으로 분기**한다(기사=좁은 폭, 관리자=넓은 폭).
+
+> 기사 앱이 "진짜 모바일 앱"이어야 한다면 그건 Web으로도 UI 검증은 가능하고, 배포 단계에서 APK/IPA를 뽑으면 된다.
+> MVP 단계에서 Docker 기동 대상은 Web 하나로 충분하다.
+
+### 1.3 ⚠️ 지도를 네이버가 아니라 `flutter_map`으로 가는 이유
+
+`flutter_naver_map` 패키지는 **Android/iOS만 지원하고 Web을 지원하지 않는다.** §1.2대로 Web이 주 타깃이므로
+네이버 지도를 쓰면 웹에서 지도가 아예 안 뜬다.
+
+- **채택**: `flutter_map`(Leaflet 계열, 순수 Dart) + OpenStreetMap 타일 — Web·모바일 모두 동작, API 키 불필요
+- 우리가 지도에 그릴 건 **마커(버스·정류장) + polyline(노선)** 뿐이고, 이 둘은 `flutter_map`으로 충분하다
+- **백엔드가 실도로 경로 계산을 이미 네이버로 하고 있고**(`routing.provider=naver`), 프론트는 그 결과 polyline을 받아 그리기만 한다
+  → 타일 제공자가 OSM이어도 경로 정확도에는 영향이 없다
+
+**교체 가능하게 둔다**: `core/map/`에 `MapAdapter` 추상(포트)을 두고 `FlutterMapAdapter`를 구현체로 붙인다.
+나중에 네이버 지도로 바꿀 때 화면 코드를 안 건드리도록 — 백엔드의 `RouteEngine`/`MapRouteClient` 포트 패턴과 같은 방식이다.
+
+---
+
+## 2. 폴더 구조
+
+백엔드 모듈명과 **1:1로 맞춘 feature-first 구조**를 쓴다. "이 화면이 어느 백엔드 모듈을 부르는지"를 폴더만 봐도 알 수 있게 하기 위함이다.
+
+```
+frontend/
+├── Dockerfile                  # 멀티스테이지: flutter build web → nginx
+├── nginx.conf                  # SPA fallback (go_router 딥링크용)
+├── pubspec.yaml
+├── docs/
+│   └── FLUTTER_FRONTEND_PLAN.md    # ← 이 문서
+└── lib/
+    ├── main.dart
+    ├── app/                    # 앱 셸
+    │   ├── router.dart         # go_router + 역할별 redirect 가드
+    │   ├── theme.dart
+    │   └── layout.dart         # 반응형 셸(모바일=기사 / 데스크톱=관리자)
+    ├── core/
+    │   ├── api/
+    │   │   ├── api_client.dart     # dio 인스턴스 + baseUrl
+    │   │   ├── api_response.dart   # ApiResponse<T> 언랩
+    │   │   ├── auth_interceptor.dart   # Bearer 부착 + 401 → refresh 재시도
+    │   │   └── api_exception.dart      # HTTP status → 앱 예외 매핑
+    │   ├── ws/
+    │   │   └── stomp_service.dart  # 연결·구독·재연결
+    │   ├── storage/
+    │   │   └── token_storage.dart  # accessToken/refreshToken 보관
+    │   └── map/
+    │       ├── map_adapter.dart        # 포트(추상)
+    │       └── flutter_map_adapter.dart # 구현체
+    └── features/
+        ├── auth/               # 로그인, 토큰, 역할 판별
+        ├── location/           # 버스 실시간 위치(F1)
+        ├── rideevent/          # 승하차 기록/조회
+        ├── routing/            # 배차 제안·확정·노선 조회(F4)
+        └── notification/       # 알림함 + 실시간 수신
+```
+
+각 `features/<module>/` 내부는 3계층으로 나눈다 — **백엔드의 Controller/Service/Repository와 대응**한다:
+
+| 폴더 | 역할 | 백엔드 대응 |
+|---|---|---|
+| `data/` | DTO(freezed) + Repository(dio 호출) | Repository |
+| `application/` | Riverpod provider/notifier — 상태·비즈니스 흐름 | Service |
+| `presentation/` | Screen · Widget | Controller + View |
+
+---
+
+## 3. 백엔드 연동 규약 — ⚠️ 함정 모음
+
+`MVP_API_SPEC.md`를 코드와 대조해 추린, **모르고 짜면 반드시 한 번 막히는 지점**들이다.
+
+### 3.1 응답 언랩
+
+모든 REST 응답이 `{ success, data, message }`로 한 겹 감싸져 있다. `data`만 꺼내 쓰되 **`success=false`면 `message`를 그대로 사용자에게 보여준다.**
+
+```dart
+// core/api/api_response.dart 요지
+class ApiResponse<T> {
+  final bool success;
+  final T? data;
+  final String? message;
+}
+```
+
+### 3.2 ⚠️ 에러 코드 필드가 없다
+
+실패 응답에 `errorCode` 같은 **기계판독용 필드가 없다.** 분기 근거는 **HTTP status 뿐**이고, `message`는 사람에게 보여주는 용도다.
+→ `ApiException`을 `status` 기준으로만 만든다. 절대 `message` 문자열을 파싱해서 분기하지 말 것.
+
+| status | 앱 처리 |
+|---|---|
+| 400 | 폼 검증 오류 — `message`를 필드 하단에 표시. **여러 필드가 틀려도 1개만 온다** → 재제출 후 또 다른 오류가 나올 수 있음을 감안 |
+| 401 | 토큰 refresh 시도 → 실패 시 로그인 화면으로 |
+| 403 | "권한 없음" 표시. 역할 자체 불일치 / 담당 아님 두 경우가 같은 403이라 구분 불가 |
+| 404 | "대상 없음" 빈 상태 표시 |
+| 409 | 이미 처리된 요청 — 버튼 재활성화하지 말고 목록 새로고침 |
+| 500 | 공통 에러 배너 |
+
+### 3.3 ⚠️ accessToken이 15분마다 만료된다
+
+- accessToken **900초(15분)** / refreshToken **14일**
+- `POST /api/auth/refresh` 응답은 **accessToken과 refreshToken을 둘 다 새로 준다**(refresh 토큰 회전) → 둘 다 저장 갱신 필요
+- **401 수신 시 자동 refresh 후 원 요청 1회 재시도**를 `auth_interceptor.dart`에 구현한다
+- 동시 요청 여러 개가 한꺼번에 401을 받으면 refresh가 중복 호출된다 → **refresh는 뮤텍스로 1회만 태우고 나머지는 대기시킨다**
+
+### 3.4 ⚠️ 로그인 응답에 사용자 정보가 없다 — JWT를 직접 디코딩해야 한다
+
+로그인 응답은 `{ accessToken, refreshToken }` 뿐이고, **`/api/users/me` 같은 엔드포인트가 없다.**
+역할·userId·tenantId는 **accessToken(JWT) payload에서 꺼낸다** (`JwtTokenProvider` 대조 확인, 2026-07-28):
+
+| 클레임 | 내용 |
+|---|---|
+| `sub` | userId |
+| `email` | 이메일 |
+| `memberships` | `"tenantId:ROLE"` 문자열 배열 (예: `["1:ACADEMY_ADMIN"]`) |
+| `type` | `access` / `refresh` |
+
+→ `features/auth/`에서 payload를 Base64URL 디코딩해 `AuthSession { userId, email, role, tenantId }`를 만든다.
+
+⚠️ `memberships` 원소는 `"tenantId:ROLE"` 형식인데, **`PLATFORM_ADMIN`은 소속 학원이 없어 tenantId 자리가 빈 문자열**로 온다
+(`":PLATFORM_ADMIN"`). `split(':')[0]`을 그대로 `int.parse`하면 터진다 → 빈 문자열이면 `null`로 다룰 것.
+
+> 서명 검증은 클라이언트가 할 필요 없다(서버가 매 요청 검증한다). 클라이언트는 **화면 분기용으로만** 읽는다.
+
+### 3.5 기사 `busId` 조회 — 백엔드에 `GET /api/buses/me` 신설 (D1 확정, 2026-07-28)
+
+기사용 API는 전부 `busId`를 입력으로 받는데(`GET /api/route-plans/driver/{busId}`, `POST /api/locations/bus`,
+`GET /api/ride-events/bus/{busId}`, `POST /api/drive-sessions/start`), **DRIVER가 자기 담당 busId를 조회할 엔드포인트가 없었다.**
+`GET /api/buses`는 관리자 전용이고 JWT 클레임에도 busId가 없다.
+
+→ **백엔드에 `GET /api/buses/me`(권한 `DRIVER`)를 추가**해 해결한다(사용자 확정). 작업 항목은 **C0**(§6).
+
+- 응답: 기존 `BusResponse`(담당 버스 1대). 담당 버스가 없으면 `404 NOT_FOUND`
+- 프론트는 로그인 직후 1회 호출해 `busId`를 세션에 캐시하고, 이후 기사 화면 전체에서 재사용한다
+- MVP API 17개에는 없던 엔드포인트다 — 추가 후 `MVP_API_SPEC.md`·Swagger `"00. MVP 사용 API"` 태그도 함께 갱신할 것(17→18)
+
+### 3.6 ⚠️ 버스 위치는 WebSocket으로 안 온다 — 폴링해야 한다
+
+WebSocket 구독 목록에 **버스 위치가 없다.** `/user/queue/location`·`/topic/tenant/{id}/location`은 전부 **학생** 위치다.
+
+- 관리자 관제 지도는 `GET /api/locations/buses`를 **3,000ms 주기로 직접 폴링**한다(서버 위치 갱신 주기가 3초라 더 자주 불러도 새 값이 없다)
+- 화면이 백그라운드로 가면 폴링을 멈춘다(타이머 누수 방지)
+- **위치 보고가 한 번도 없는 버스는 응답 배열에서 아예 빠진다** → "버스 없음"과 "위치 없음"을 구분할 수 없다.
+  버스 목록이 필요하면 `GET /api/buses`를 별도로 불러 합쳐야 한다
+
+### 3.7 WebSocket(STOMP) 규약
+
+- endpoint `ws://<host>/ws/location`, **SockJS 미사용**
+- 인증: `CONNECT` 프레임의 네이티브 헤더 `Authorization: Bearer <accessToken>` — **세션 수립 시 1회만** 검증
+- **재연결은 100% 클라이언트 책임**. `stomp_dart_client`의 `reconnectDelay`를 쓰되, **재연결 때마다 헤더를 다시 실어야 한다**
+  (이전 세션 인증은 재사용 안 됨). 이때 토큰이 만료됐으면 refresh 먼저 → 그 다음 CONNECT
+- heartbeat 10초
+- **⚠️ WS는 "연결 이후의 변화"만 준다.** 초기 화면은 **반드시 REST로 먼저 채우고**, 그 뒤 도착분만 덧붙인다
+- `/topic/tenant/{tenantId}/**` 구독은 추가 인가 검사가 있다(그 학원 관리자 또는 PLATFORM_ADMIN만) → 기사 앱은 `/user/queue/**`만 구독
+
+| destination | 구독 주체 |
+|---|---|
+| `/user/queue/notifications` | 기사(자기 반 학생 관련 알림) |
+| `/topic/tenant/{tenantId}/notifications` | 관리자 |
+
+### 3.8 ⚠️ polyline 좌표 순서가 `[경도, 위도]`다
+
+`RoutePlanResponse.polyline`은 **JSON 배열이 아니라 JSON 문자열**로 온다: `"[[127.0275,37.501],...]"`
+
+1. 먼저 `jsonDecode`로 문자열을 한 번 더 파싱한다
+2. **각 원소는 `[lng, lat]` 순서**다. `flutter_map`의 `LatLng(lat, lng)`와 **순서가 반대**이므로 뒤집어 넣어야 한다.
+   안 뒤집으면 노선이 지도 밖(바다 한가운데)에 그려진다
+
+### 3.9 CORS
+
+`localhost:3000`은 백엔드 `app.cors.allowed-origins` 기본값에 **이미 포함**돼 있다 → Docker 프론트를 3000 포트로 띄우면 설정 변경 불필요.
+다른 포트를 쓰면 `CORS_ALLOWED_ORIGINS` 환경변수로 추가해야 한다. `http://localhost:3000`과 `http://127.0.0.1:3000`은 **다른 출처**로 취급된다.
+
+### 3.10 API Base URL
+
+빌드 시점 주입: `--dart-define=API_BASE_URL=http://localhost:8080`
+→ `const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:8080')`
+
+**브라우저에서 실행되므로 `localhost:8080`이 맞다**(컨테이너 이름 `backend:8080`이 아니다 — 요청 주체가 컨테이너가 아니라 사용자 브라우저다).
+
+---
+
+## 4. 화면 ↔ API 매핑
+
+### 4.1 공통
+
+| 화면 | API |
+|---|---|
+| 로그인 | `POST /api/auth/login` |
+| (백그라운드) 토큰 갱신 | `POST /api/auth/refresh` |
+
+로그인 성공 → JWT 디코딩(§3.4) → 역할에 따라 `/driver` 또는 `/admin`으로 리다이렉트.
+
+### 4.2 기사 (DRIVER) — 모바일 레이아웃
+
+| 화면 | API | 비고 |
+|---|---|---|
+| 오늘의 노선 | `GET /api/route-plans/driver/{busId}?serviceDate=` | PUBLISHED만 내려온다. 등원/하원 탭 분리 |
+| 노선 지도 | (위 응답의 `polyline`·`stops`) | §3.8 좌표 순서 주의 |
+| 승하차 기록 | `POST /api/ride-events` | `BOARD`/`ALIGHT`/`HANDOVER` 버튼. `source`는 서버가 `MANUAL`로 채움 |
+| 오늘 명단 | `GET /api/ride-events/bus/{busId}?date=` | 기록 후 재조회로 목록 갱신 |
+| 위치 보고 | `POST /api/locations/bus` | 주기 전송. §8 D2 참조 |
+| 알림 | WS `/user/queue/notifications` | `ROUTE_PUBLISHED` 수신 시 노선 재조회 |
+
+### 4.3 관리자 (ACADEMY_ADMIN / PLATFORM_ADMIN) — 데스크톱 레이아웃
+
+| 화면 | API | 비고 |
+|---|---|---|
+| 관제 지도 | `GET /api/locations/buses?tenantId=` | **3초 폴링**(§3.6) |
+| 배차 제안 | `POST /api/route-plans/auto-assign` | 응답의 `excludedStudentNames`를 **경고 배너로 반드시 표시**(에러 아님, 좌표 없어 제외된 학생) |
+| 배차 확정 | `POST /api/route-plans/auto-assign/confirm` | `planIds` 전달. 제안→확정 사이 화면에서 검토. **409면 이미 확정된 것** → 목록 새로고침 |
+| 노선 목록 | `GET /api/route-plans?tenantId=&busId=` | |
+| 노선 상세 | `GET /api/route-plans/{id}` | 정차 순서 + 지도 |
+| 알림 이력 | `GET /api/notifications?tenantId=` + WS `/topic/tenant/{id}/notifications` | REST로 초기 로드 후 WS 덧붙이기(§3.7) |
+
+`PLATFORM_ADMIN`은 `tenantId`가 **필수**다(생략 시 400). `ACADEMY_ADMIN`은 생략하면 본인 학원.
+→ 플랫폼 관리자로 로그인하면 **학원 선택 UI가 먼저 필요**하다. MVP에서는 시드 기준 `tenantId=1` 고정으로 두고 §8 D3에서 확정.
+
+**`approve`/`publish`(§5.3·5.4)는 화면에 넣지 않는다** — `confirm`이 승인·배포까지 한 번에 처리하므로 MVP에서 직접 호출할 일이 없다.
+
+---
+
+## 5. Docker 구성
+
+### 5.1 Dockerfile (멀티스테이지)
+
+```dockerfile
+FROM ghcr.io/cirruslabs/flutter:stable AS build
+WORKDIR /app
+COPY pubspec.* ./
+RUN flutter pub get
+COPY . .
+RUN flutter build web --release --dart-define=API_BASE_URL=http://localhost:8080
+
+FROM nginx:alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/build/web /usr/share/nginx/html
+EXPOSE 80
+```
+
+### 5.2 nginx.conf — SPA fallback 필수
+
+```nginx
+server {
+  listen 80;
+  root /usr/share/nginx/html;
+  location / {
+    try_files $uri $uri/ /index.html;   # go_router 딥링크(/admin/routes 등) 새로고침 시 404 방지
+  }
+}
+```
+
+### 5.3 docker-compose.yml 수정 사항
+
+기존 `frontend` 서비스는 Next.js(포트 3000 직접 노출) 전제라 아래처럼 바꾼다:
+
+- `profiles: ["frontend"]` **제거** → 기본 `docker compose up`에 포함
+- 포트 매핑 `"3000:80"` (nginx는 컨테이너 내부 80, 호스트는 CORS 허용 목록에 있는 3000)
+- `depends_on: [backend]` 유지
+
+> **주의**: 반복 개발 중에는 Docker 재빌드가 느리다. UI 작업은 `flutter run -d chrome --web-port=3000`으로 로컬 실행하고,
+> Docker는 "통합 확인 / 시연" 시점에만 쓰는 게 효율적이다. 어느 쪽이든 origin이 `localhost:3000`이라 CORS는 동일하게 통과한다.
+
+---
+
+## 6. 작업 백로그 (커밋 단위 체크리스트)
+
+> **상태 범례**: ⬜ 미착수 / 🟡 진행중 / ✅ 완료 / ⛔ 블록
+> 각 항목 완료 시 **검증 결과와 커밋 해시를 병기**한다. 한 항목 = 한 커밋을 원칙으로 한다
+> (세션이 중간에 끊겨도 커밋된 지점까지는 안전하게 남기기 위함).
+
+### P0 — 스캐폴딩
+
+- [x] ✅ **C0** *(백엔드)* `GET /api/buses/me` 신설 — 권한 `DRIVER`, 담당 버스 1대 반환(§3.5)
+  - `BusController.myBus()` (메서드 레벨 `@PreAuthorize("hasRole('DRIVER')")`로 클래스 레벨 관리자 전용 규칙을 덮어씀)
+    + `BusQueryService.getMyBus()` + `BusRepository.findByDriverIdOrderByIdAsc()`
+  - Swagger `"00. MVP 사용 API"` 이중 태깅 + `MVP_API_SPEC.md` §2.3 신설(17→18)
+  - **검증**: `BusQueryServiceTest` 3케이스 추가(정상·담당버스없음 404·복수버스 시 첫 건) → `./gradlew test --tests '*BusQueryServiceTest*'` 통과.
+    전체 `./gradlew test` 100개 중 99개 통과, `BackendApplicationTests.contextLoads()` 1개는 **Docker 미기동(Postgres 연결 실패)** 으로 실패 — 환경 문제
+  - ⏳ **미검증**: Docker 기동 후 `driver@school.com`으로 실제 호출(3호차 반환) — 다음 세션에서 확인할 것
+- [ ] ⬜ **C1** Flutter 프로젝트 생성(`flutter create`) + `pubspec.yaml` 의존성 + §2 폴더 골격
+  - 검증: `flutter analyze` 무경고, `flutter run -d chrome` 기본 화면 표시
+- [ ] ⬜ **C2** `Dockerfile` + `nginx.conf` + `docker-compose.yml` frontend 서비스 갱신(§5)
+  - 검증: `docker compose up -d --build` → `http://localhost:3000` 접속
+
+### P1 — 코어 인프라
+
+- [ ] ⬜ **C3** `ApiResponse<T>` 언랩 + dio 클라이언트 + `ApiException`(HTTP status 매핑, §3.1~3.2)
+- [ ] ⬜ **C4** 로그인 화면 + 토큰 저장 + JWT 디코딩(§3.4) + 401 자동 refresh 인터셉터(뮤텍스 포함, §3.3)
+  - 검증: 5개 시드 계정 전부 로그인 → 역할·tenantId가 올바르게 파싱되는지
+- [ ] ⬜ **C5** `go_router` + 역할별 redirect 가드 + 반응형 셸(§2 `app/`)
+  - 검증: 기사 계정으로 `/admin` 직접 접근 시 차단, 새로고침 시 세션 유지
+
+### P2 — 기사 앱  *(C0 완료 후 착수)*
+
+- [ ] ⬜ **C6** 오늘의 노선 화면 + 지도(polyline·정차 마커) — `MapAdapter` 포함(§1.3, §3.8)
+  - 로그인 직후 `GET /api/buses/me`로 busId 캐시(§3.5)
+- [ ] ⬜ **C7** 승하차 기록(`POST /api/ride-events`) + 오늘 명단 조회
+- [ ] ⬜ **C8** 버스 위치 주기 보고(`POST /api/locations/bus`) — **Mock / 실GPS 토글**(§8 D2)
+  - `LocationSource` 추상 + `MockLocationSource`(노선 polyline 따라 이동) / `GpsLocationSource`(`geolocator`)
+  - 기사 화면 상단에 토글 스위치, 기본값 **Mock**. 5,000ms 주기 전송
+
+### P3 — 관리자 콘솔
+
+- [ ] ⬜ **C9** 관제 지도 + 3초 폴링(§3.6) — 라이프사이클 연동 타이머 정리 포함
+- [ ] ⬜ **C10** 배차 제안 → 검토 → 확정 흐름(`excludedStudentNames` 경고 배너 포함)
+- [ ] ⬜ **C11** 노선 목록 / 상세
+
+### P4 — 실시간
+
+- [ ] ⬜ **C12** STOMP 연결·구독·재연결(§3.7) — 재연결 시 토큰 재주입
+- [ ] ⬜ **C13** 알림함: REST 초기 로드 + WS 덧붙이기(기사=`/user/queue`, 관리자=`/topic/tenant/{id}`)
+  - 검증: 기사가 승하차 기록 → 관리자 화면에 알림이 즉시 뜨는지(2개 브라우저 창)
+
+### P5 — 마감
+
+- [ ] ⬜ **C14** 로딩/빈상태/에러 UI 통일 + 전체 시나리오 통합 점검
+  - 검증: `docker compose down && up` 후 시드 상태에서 기사·관리자 전 화면 1회씩 통과
+
+---
+
+## 7. 세션 재개 지점
+
+> ⚠️ **작업 규칙 (사용자 요청, 2026-07-28): 토큰 소진으로 세션이 중간에 끊길 것을 전제로 진행한다.**
+> **한 항목(C*)을 끝낼 때마다 §6 체크박스와 이 절을 갱신하고 커밋한다.** 다음 세션은 이 문서만 읽고 이어간다.
+> 항목을 마치지 않은 채 다음으로 넘어가지 않는다.
+
+- **마지막 완료 항목**: **C0** — 백엔드 `GET /api/buses/me` 신설 (단위테스트 통과, 실기동 검증만 대기)
+- **현재 진행 중**: 없음
+- **다음 할 일**: **C1**(Flutter 프로젝트 생성 + 의존성 + 폴더 골격)
+- **대기 중인 검증**: Docker 기동 후 `GET /api/buses/me` 실호출 확인(C0)
+- **환경 메모**: Docker(postgres/redis/kafka/backend)는 **사용자가 직접 켠다** — 필요할 때 요청할 것
+
+---
+
+## 8. 설계 결정 기록 (확정됨)
+
+> 다음 세션에서 **같은 논의를 반복하지 않기 위한 기록**이다. 뒤집을 땐 여기부터 고친다.
+
+### D1. 기사 `busId` 조회 → **백엔드에 `GET /api/buses/me` 신설** ✅ 확정 2026-07-28
+
+기사용 API가 전부 `busId`를 입력으로 받는데 DRIVER가 그걸 조회할 수단이 없었다(§3.5).
+하드코딩(`busId=1`)·수동입력 대안은 기사 계정이 2명 이상이면 즉시 깨지므로 배제.
+**MVP 범위 확장이 아니라 MVP를 동작시키기 위한 최소 보완**으로 판단해 백엔드 엔드포인트 1개를 추가한다 → **C0**.
+
+### D2. 위치 보고 좌표 출처 → **Mock / 실GPS 토글 스위치** ✅ 확정 2026-07-28
+
+`LocationSource` 추상 뒤에 두 구현체를 두고 기사 화면에서 토글한다 — 백엔드의 `LocationSource` 포트 패턴과 대칭.
+
+- `MockLocationSource` — **기본값**. 조회한 노선 polyline을 따라 좌표를 보간해 이동시킨다. 브라우저에서 위치 권한·개인정보 동의 없이 전 흐름 시연 가능
+- `GpsLocationSource` — `geolocator`로 실제 단말 좌표. 모바일 실기기 확인용
+- 전송 주기 **5,000ms** (서버 위치 갱신 3초 / 관제 지도 폴링 3초와 균형)
+
+> 이 토글이 `PROJECT_MASTER_PLAN.md` Phase 8(Mock→실 GPS 전환)의 프론트 쪽 준비물이 된다.
+
+### D3. `PLATFORM_ADMIN` 학원 선택 → **`tenantId=1` 고정** ✅ 기본값 채택 2026-07-28
+
+플랫폼 관리자는 `tenantId`가 필수인데 소속 학원이 없다(§4.3). 학원 목록 API(`/api/tenants`)는 MVP 17개 밖이므로
+MVP에서는 시드 기준 `tenantId=1`로 고정하고 화면 상단에 "고정값" 표시만 한다. 학원 선택 드롭다운은 MVP 이후.
+
+### D4. 지도 = `flutter_map`(OSM) ✅ / D5. Docker 대상 = Flutter Web ✅
+
+각각 §1.3·§1.2에 근거 기록.
+
+---
+
+## 9. 리스크 / 전제
+
+- **Docker 인프라는 사용자가 직접 켠다** — 백엔드·DB가 안 떠 있어 생긴 실패는 코드 결함이 아니라 **환경 문제**로 분류해 보고한다(루트 `CLAUDE.md` 작업 규칙)
+- **로컬 postgres에 영속 볼륨이 없다** — `docker compose down` 후 `up`이면 데이터가 시드로 리셋된다. 프론트 테스트로 꼬인 데이터는 이 방법으로 되돌린다
+- **Swagger UI가 항상 최신** — 이 문서와 `MVP_API_SPEC.md`가 어긋나면 `http://localhost:8080/swagger-ui/index.html`의 "00. MVP 사용 API" 그룹이 기준이다
+- **백엔드 API가 바뀌면 이 문서 §3·§4도 같이 갱신**한다
+- 패키지 버전은 명시하지 않는다 — `flutter pub add` 시점의 최신 안정판을 쓰고, 확정된 버전은 `pubspec.lock`이 기록한다
