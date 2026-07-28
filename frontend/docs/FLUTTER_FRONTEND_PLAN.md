@@ -378,8 +378,16 @@ DB/Redis/Kafka 포트(5432·6379·29092)만 호스트에 남겼다 — DB 툴 �
     ① *동시에 401을 받아도 재발급은 1회만*(폴링+알림이 같이 만료되는 상황) ② *재시도가 또 401이어도 무한 반복 안 함*
     JWT: `":PLATFORM_ADMIN"`(tenantId 빈 문자열) · 복수 멤버십 · 알 수 없는 역할 · base64 padding 전부 커버
   - **실환경 검증**: CORS preflight에서 `Authorization` 헤더 허용 확인, `Origin: localhost:3000`으로 로그인 200
-- [ ] ⬜ **C5** `go_router` + 역할별 redirect 가드 + 반응형 셸(§2 `app/`)
-  - 검증: 기사 계정으로 `/admin` 직접 접근 시 차단, 새로고침 시 세션 유지
+- [x] ✅ **C5** `go_router` + 역할별 redirect 가드 + 반응형 셸
+  - `app/router/`: `app_routes.dart`(경로 상수) · `role_redirect.dart`(**순수 함수** 가드) · `app_router.dart`
+  - `app/shell/app_shell.dart` — 폭에 따라 `NavigationRail`(넓음) / `NavigationBar`(좁음) 전환, `AppBreakpoints.compact` 기준
+  - `StatefulShellRoute.indexedStack` — 탭을 옮겨도 각 탭의 스크롤·입력이 유지된다
+  - 자리표시자 화면 6개 생성(`PendingScreen`) — 각 화면에 **어느 C 항목에서 채워지는지** 표시.
+    C6~C13 에이전트가 채울 슬롯이다
+  - ⭐ 가드를 위젯이 아니라 **순수 함수**로 뺐다 — 화면에 흩어지면 전체 규칙을 아무도 못 보고, 테스트도 못 한다
+  - **검증**: `flutter test` **43/43**(가드 12케이스: 복원중·미로그인·기사·관리자·MVP밖 역할 교차 접근).
+    컨테이너 배포 후 딥링크 9개 전부 200(`/admin/routes/1` 포함)
+  - 화면 트리: 기사 = 오늘의노선·승하차명단 / 관리자 = 관제지도·배차·노선·알림
 
 ### P2 — 기사 앱  *(C0 완료 후 착수)*
 
@@ -415,11 +423,17 @@ DB/Redis/Kafka 포트(5432·6379·29092)만 호스트에 남겼다 — DB 툴 �
 > **한 항목(C*)을 끝낼 때마다 §6 체크박스와 이 절을 갱신하고 커밋한다.** 다음 세션은 이 문서만 읽고 이어간다.
 > 항목을 마치지 않은 채 다음으로 넘어가지 않는다.
 
-- **마지막 완료 항목**: **C4** — 인증 전체(로그인·토큰보관·JWT해석·401 자동재발급). `flutter test` 30/30
-- **다음 할 일**: **C5** — `go_router` + `AppRoutes` 경로 상수 + 역할별 redirect 가드 + 반응형 셸
-  - `app/app.dart`의 `_SessionGate`·`_SignedInPlaceholder`(C4 임시 분기)를 **라우터로 교체**하는 게 C5의 첫 작업이다
-- **그 다음**: C6~C8(기사) → C9~C11(관리자). **C6부터 에이전트 팀 병렬 투입** 예정
-- **브라우저 확인**: `http://localhost:3000` → 로그인(`driver@school.com` / `password`) → 역할·userId·tenantId 표시 확인 가능
+- **마지막 완료 항목**: **C5** — 라우팅·역할가드·반응형 셸 완료. **코어(C0~C5) 전부 끝. `flutter test` 43/43**
+- **다음 할 일**: **C6** — 기사 오늘의 노선. 로그인 직후 `GET /api/buses/me`로 busId 캐시(§3.5) →
+  `GET /api/route-plans/driver/{busId}` → `MapViewAdapter` 포트 + `FlutterMapAdapter`로 polyline·정차 마커(§3.8 좌표 역순 주의)
+- **그 다음**: C7·C8(기사) → C9~C11(관리자) → C12·C13(실시간) → C14(마감)
+- **에이전트 투입 방식**(사용자 요청): C6~C11은 feature 단위로 병렬 가능.
+  각 에이전트에 ① 담당 자리표시자 화면 경로 ② `FLUTTER_CODE_CONVENTIONS.md` 준수 ③ 이 문서 §3 함정 목록을 전달하고,
+  완료 후 `convention-auditor`로 컨벤션 §9 체크리스트 검사를 돌린다.
+  ⚠️ `core/map`(`MapViewAdapter`)은 C6·C9·C11이 함께 쓰므로 **C6에서 먼저 만든 뒤** 나머지를 병렬로 돌린다
+- **브라우저 확인**: `http://localhost/` → 로그인 → 역할별 화면(기사 2탭 / 관리자 4탭)
+  - `driver@school.com` · `admin@school.com` · `platform@school.com` / 비밀번호 전부 `password`
+  - `student@school.com`으로 로그인하면 "준비 중" 안내(MVP 범위 밖)
 - **인프라 상태**: postgres(healthy)·redis·kafka·backend 4개 기동 중.
   꺼졌다면 §9의 PATH를 잡고 `docker compose up -d --build`(볼륨이 없어 `down` 후 `up`이면 시드 상태로 리셋된다)
 - **에이전트 활용**: 화면 작업(C6~C11)은 feature 단위로 병렬화 가능 — 에이전트에 `FLUTTER_CODE_CONVENTIONS.md` 준수를 명시하고,

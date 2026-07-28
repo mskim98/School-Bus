@@ -45,7 +45,9 @@ class PendingScreen extends StatelessWidget {
             Text(
               description,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.hintColor,
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             Chip(
