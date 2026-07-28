@@ -333,11 +333,15 @@ server {
   - ⚠️ **`riverpod_annotation`/`riverpod_generator` 제외** — Flutter 3.44.8 번들 analyzer와 버전 충돌.
     Provider는 손으로 선언한다(입문 단계엔 오히려 마법이 적어 유리). 코드생성은 freezed/json_serializable만
   - **검증**: `flutter analyze` 무경고 · `dart format` 적용 · `flutter build web --release` 성공(`main.dart.js` 2.1MB)
-- [ ] 🟡 **C2** `Dockerfile` + `nginx.conf` + `docker-compose.yml` frontend 서비스 갱신(§5)
-  - ✅ 작성 완료: `frontend/Dockerfile`(멀티스테이지, `API_BASE_URL` build-arg) · `frontend/nginx.conf`(SPA fallback + 캐시 정책) · `frontend/.dockerignore`
-  - ⏳ 남음: `docker-compose.yml`의 frontend 서비스 갱신 — **C1 완료 후에 한다.**
-    지금 `profiles: ["frontend"]`를 떼면 pubspec.yaml이 없어 빌드가 실패하고, 잘 되던 `docker compose up -d --build`(백엔드)까지 같이 깨진다
-  - **미검증**: Docker Desktop 미설치라 빌드를 한 번도 돌려보지 못했다 — C1 후 반드시 실제 빌드로 확인할 것
+- [x] ✅ **C2** `Dockerfile` + `nginx.conf` + `docker-compose.yml` frontend 서비스(§5)
+  - `profiles` 제거해 기본 `docker compose up`에 포함, 포트 `"3000:80"`, `API_BASE_URL`을 build-arg로 전달
+  - ⚠️ **`ghcr.io/cirruslabs/flutter`에는 버전 태그가 없다**(`stable`/`beta`/`latest`뿐) — 이미지 고정 불가.
+    stable 이미지 Dart가 3.12.0인데 `flutter create` 기본 제약이 `^3.12.2`라 `pub get`이 실패했다
+    → **pubspec의 `environment.sdk`를 `^3.12.0`으로 낮춰** 흡수(상한 `<4.0.0`은 그대로라 안전).
+    로컬에서만 되는 최신 문법을 쓰면 여기서 깨지므로 **빌드 확인은 항상 컨테이너로** 할 것
+  - **검증 완료**: `/` 200(1,508B) · 딥링크 `/admin/routes` **200**(SPA fallback 동작, 404 아님) ·
+    `main.dart.js` 200(2.2MB, gzip 779KB, `max-age=2592000 immutable`) · `index.html` `no-store` ·
+    번들에 `http://localhost:8080` 주입 확인 · 컨테이너 5개 기동
 
 ### P1 — 코어 인프라
 
@@ -381,9 +385,9 @@ server {
 > **한 항목(C*)을 끝낼 때마다 §6 체크박스와 이 절을 갱신하고 커밋한다.** 다음 세션은 이 문서만 읽고 이어간다.
 > 항목을 마치지 않은 채 다음으로 넘어가지 않는다.
 
-- **마지막 완료 항목**: **C1** — Flutter 프로젝트 + 의존성 + 폴더 골격 + `FLUTTER_CODE_CONVENTIONS.md`
-- **다음 할 일**: **C2 마무리** — `docker-compose.yml`의 frontend 서비스 갱신(`profiles` 제거, `"3000:80"`) → `docker compose up -d --build` → `localhost:3000` 접속 확인
-- **그 다음**: C3(ApiResponse·dio·예외 매핑) → C4(로그인·JWT·refresh) → C5(라우터·역할가드)
+- **마지막 완료 항목**: **C2** — Docker 파이프라인 완성. `docker compose up -d --build` 한 번으로 프론트(3000)+백엔드(8080)가 함께 뜬다
+- **다음 할 일**: **C3** — `ApiResponse<T>` 언랩 + dio 클라이언트 + `ApiException`(HTTP status 매핑). §3.1~3.2 참조
+- **그 다음**: C4(로그인·JWT 디코딩·refresh 뮤텍스) → C5(go_router·역할가드)
 - **인프라 상태**: postgres(healthy)·redis·kafka·backend 4개 기동 중.
   꺼졌다면 §9의 PATH를 잡고 `docker compose up -d --build`(볼륨이 없어 `down` 후 `up`이면 시드 상태로 리셋된다)
 - **에이전트 활용**: 화면 작업(C6~C11)은 feature 단위로 병렬화 가능 — 에이전트에 `FLUTTER_CODE_CONVENTIONS.md` 준수를 명시하고,

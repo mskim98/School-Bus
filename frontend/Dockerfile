@@ -4,6 +4,11 @@
 # 없다(빌드만 가능). 모바일 실기기 확인은 같은 코드베이스를 `flutter run` 으로 Docker 밖에서 돌린다.
 # 상세: frontend/docs/FLUTTER_FRONTEND_PLAN.md §1.2
 
+# ⚠️ 이 레지스트리에는 버전 태그가 없다(stable/beta/latest 뿐) — 태그 고정이 불가능하다.
+# 그래서 stable 이미지가 로컬 SDK 보다 뒤처지는 상황을 pubspec 쪽에서 흡수한다:
+# `environment.sdk` 하한을 flutter create 기본값(^3.12.2)보다 낮춰 잡아야
+# `flutter pub get` 이 통과한다(실제로 이미지 Dart 3.12.0 vs 요구 ^3.12.2 로 실패했음).
+# 로컬에서만 되는 최신 문법을 쓰면 여기서 깨지니, 빌드는 항상 이 컨테이너로 확인할 것.
 FROM ghcr.io/cirruslabs/flutter:stable AS build
 WORKDIR /app
 
