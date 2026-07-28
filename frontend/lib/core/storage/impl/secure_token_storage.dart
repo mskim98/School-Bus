@@ -1,4 +1,3 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../spec/token_storage.dart';
@@ -41,7 +40,3 @@ class SecureTokenStorage implements TokenStorage {
     await _storage.delete(key: _refreshKey);
   }
 }
-
-final tokenStorageProvider = Provider<TokenStorage>(
-  (ref) => const SecureTokenStorage(FlutterSecureStorage()),
-);

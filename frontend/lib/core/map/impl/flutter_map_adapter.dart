@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../spec/map_view_adapter.dart';
@@ -164,7 +163,3 @@ class _MarkerPin extends StatelessWidget {
     return GestureDetector(onTap: spec.onTap, child: pin);
   }
 }
-
-final mapViewAdapterProvider = Provider<MapViewAdapter>(
-  (ref) => const FlutterMapAdapter(),
-);

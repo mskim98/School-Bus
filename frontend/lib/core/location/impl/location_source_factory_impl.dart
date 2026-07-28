@@ -1,5 +1,3 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../../map/spec/map_view_adapter.dart';
 import '../spec/location_source.dart';
 import '../spec/location_source_factory.dart';
@@ -20,7 +18,3 @@ class LocationSourceFactoryImpl implements LocationSourceFactory {
     LocationSourceKind.gps => const GpsLocationSource(),
   };
 }
-
-final locationSourceFactoryProvider = Provider<LocationSourceFactory>(
-  (ref) => const LocationSourceFactoryImpl(),
-);

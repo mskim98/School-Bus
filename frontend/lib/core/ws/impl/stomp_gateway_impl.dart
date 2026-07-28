@@ -8,14 +8,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:stomp_dart_client/stomp_dart_client.dart';
 
-import '../../api/api_config.dart';
-import '../../api/spec/session_refresher.dart';
 // 타입은 포트(spec)만 쓴다. 이 import 는 `tokenStorageProvider` 배선 때문이며,
 // `api_client.dart` 도 같은 이유로 같은 파일을 가리킨다.
-import '../../storage/impl/secure_token_storage.dart';
 import '../../storage/spec/token_storage.dart';
 import '../spec/stomp_gateway.dart';
 
@@ -306,14 +302,3 @@ class _Subscription {
 ///
 /// 연결 수명은 **쓰는 쪽(application)** 이 정한다 — 화면을 벗어나면
 /// [StompGateway.disconnect] 를 불러 소켓을 닫는다.
-final stompGatewayProvider = Provider<StompGateway>((ref) {
-  final gateway = StompGatewayImpl(
-    url: ApiConfig.wsUrl,
-    tokenStorage: ref.watch(tokenStorageProvider),
-    // ⚠️ `read` 로 늦게 꺼낸다 — `apiClientProvider` 와 같은 이유로, 재발급 구현이
-    // 다시 이 그래프를 참조해도 순환이 성립하지 않게 하기 위함이다.
-    refreshTokens: () => ref.read(sessionRefresherProvider).refresh(),
-  );
-  ref.onDispose(gateway.dispose);
-  return gateway;
-});

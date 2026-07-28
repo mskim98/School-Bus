@@ -7,6 +7,8 @@
 /// feature 의 repository 가 한다(§4) — core 는 어떤 feature 가 뭘 구독하는지 모른다.
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 /// 연결 상태. 화면이 "지금 실시간이 살아 있나"를 표시하는 데 쓴다.
 enum StompConnectionStatus {
   /// 연결한 적이 없거나 스스로 끊었다. 재시도도 하지 않는 상태.
@@ -64,3 +66,17 @@ abstract interface class StompGateway {
   /// 이전 구독이 살아남지 않는다.
   Stream<Map<String, dynamic>> subscribe(String destination);
 }
+
+/// ⚠️ `bootstrap()` 에서 override 해야 하는 provider.
+///
+/// **provider 선언이 구현체 파일이 아니라 여기 있는 이유**(컨벤션 §5) —
+/// 구현체 파일에 두면 소비자가 `impl/...` 을 import 하게 되고, 그러면 구현을 갈아끼울 때
+/// 호출부를 전부 고쳐야 한다. 포트를 만든 목적 자체가 사라진다.
+///
+/// 특히 이 포트는 조립에 필요한 재료(서버 URL·토큰 저장소·재발급 경로·dispose)가 많은데,
+/// 그 조립 지식은 인터페이스가 아니라 **합성 지점의 몫**이다.
+final stompGatewayProvider = Provider<StompGateway>(
+  (ref) => throw UnimplementedError(
+    'stompGatewayProvider 를 bootstrap() 에서 override 해야 합니다',
+  ),
+);

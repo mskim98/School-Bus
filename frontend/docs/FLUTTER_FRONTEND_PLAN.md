@@ -514,14 +514,32 @@ C-6(네이밍) 은 전부 **0건**, C-7 기계 검사도 통과. 중도 실패�
 
 | 심각도 | 항목 | 상태 |
 |---|---|---|
-| **High** | **C-5** 포트 4종(`TokenStorage`·`StompGateway`·`LocationSourceFactory`·`MapViewAdapter`)의 provider 가 `spec/` 이 아니라 **`impl/` 파일에 선언**돼 소비자 7개 파일이 구현체를 직접 import | ⬜ 미수정 |
+| **High** | **C-5** 포트 4종(`TokenStorage`·`StompGateway`·`LocationSourceFactory`·`MapViewAdapter`)의 provider 가 `spec/` 이 아니라 **`impl/` 파일에 선언**돼 소비자 7개 파일이 구현체를 직접 import | ✅ **수정 완료**(아래) |
 | Medium | `notification_tile.dart` 가 presentation 에서 `NotificationDto` 직접 사용 (§4 예외 인정 여부 판단 필요) | ⬜ 판단 대기 |
 | Medium | DTO 6곳의 근거 없는 `?? ''`/`?? 0` — 서버 계약 대조 필요 | ⬜ 판단 대기 |
 | Low | `MonitoredBus.merge` 위치 · `SizedBox(height: 320)` 매직넘버 2곳 | ⬜ |
 
-> **High 항목이 왜 중요한가**: §5 의 존재 이유는 "새 구현체로 갈아탈 때 **호출부를 수정하지 않는다**" 인데,
-> provider 가 구현체 파일에 있으면 지도를 OSM→네이버로 바꾸는 순간 화면 7곳의 import 를 전부 고쳐야 한다.
+> **High 항목이 왜 중요했나**: §5 의 존재 이유는 "새 구현체로 갈아탈 때 **호출부를 수정하지 않는다**" 인데,
+> provider 가 구현체 파일에 있으면 지도를 OSM→네이버로 바꾸는 순간 화면 7곳의 import 를 전부 고쳐야 했다.
 > **포트를 만들어 놓고 포트의 효과는 못 얻는 상태.** 4개 포트 전부 같은 모양이라 실수가 아니라 습관이었다.
+
+### ✅ 포트 배선 정리 (2026-07-29, 감사 High 대응)
+
+**provider 선언을 `impl/` → `spec/` 으로 옮기고, 실제 조립은 `bootstrap()` 한 곳에만 뒀다.**
+이미 `sessionRefresherProvider` 가 쓰던 관례를 나머지 4개 포트에 그대로 확장한 것이라 idiom 이 하나로 통일됐다.
+
+- `spec/` 의 provider 는 **기본 구현을 두지 않고 `UnimplementedError` 를 던진다** — 배선 누락이
+  조용히 넘어가는 것보다 첫 사용 시점에 바로 터지는 게 낫다(§7-5 와 같은 사고방식)
+- `bootstrap()` 의 `overrides` 목록이 **앱의 배선도**가 됐다. 구현체를 아는 파일은 이제 여기 하나뿐
+- 부수 효과: `StompGatewayImpl` 의 조립 지식(서버 URL·토큰저장소·재발급 경로·dispose)이 core 밖으로 나가면서
+  `stomp_gateway_impl.dart` 의 import 4개가 사라졌다 — 조립과 구현이 섞여 있었다는 신호였다
+
+**검증**: `lib/` 전체에서 `core/*/impl/` 을 import 하는 파일 **0개**(`bootstrap.dart` 제외) ·
+`ProviderScope` 사용처 **1곳** · `flutter analyze` 무경고 · `flutter test` **203/203**
+
+> ⚠️ **런타임 확인은 아직**이다. 테스트는 `ProviderContainer` 에 직접 override 를 넣어 돌기 때문에
+> `bootstrap()` 의 배선 누락을 잡아주지 못한다. 브라우저 점검 때 **로그인 → 지도 → 실시간 알림**이
+> 뜨는지 보면 4개 포트가 전부 배선됐다는 뜻이다.
 
 ### 🔜 새 세션이 이어서 할 일 (우선순위 순)
 
@@ -533,13 +551,13 @@ C-6(네이밍) 은 전부 **0건**, C-7 기계 검사도 통과. 중도 실패�
    ```
    확인 항목: 기사 명단에 **학생 이름**이 뜨는가(운행 시작 후) · 관제 지도에 버스가 찍히는가 ·
    배차 제안→확정이 되는가 · 알림이 실시간으로 들어오는가
-2. **감사 High 항목 수정** — 포트 provider 정의를 `impl/` → `spec/` 로 이동
-3. **감사 Medium/Low 항목 판단** — 위 표 참조
+2. **감사 Medium/Low 항목 판단** — 위 표 참조. 판단이 필요한 것이지 기계적 수정이 아니다:
+   `notification_tile` 의 DTO 직접 사용을 §4 예외로 인정할지, DTO 의 `?? ''`/`?? 0` 이 실제 서버 계약과 맞는지
 
 ### 남은 작업
 
 - **C14 의 "전체 시나리오 통합 점검"** (UI 통일 부분은 완료)
-- 컨벤션 감사 지적사항 (위 표)
+- 컨벤션 감사 Medium/Low 지적사항 (위 표) — High 는 해결됨
 
 ### 환경
 

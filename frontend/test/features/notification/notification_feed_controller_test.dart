@@ -6,7 +6,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:school_bus/core/api/api_client.dart';
-import 'package:school_bus/core/ws/impl/stomp_gateway_impl.dart';
 import 'package:school_bus/core/ws/spec/stomp_gateway.dart';
 import 'package:school_bus/features/auth/application/auth_controller.dart';
 import 'package:school_bus/features/notification/application/notification_feed_controller.dart';

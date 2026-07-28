@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// 지도 위 한 점. 지도 라이브러리 타입을 쓰지 않는 **중립 모델**이다 —
 /// 화면이 `LatLng`(flutter_map) 같은 구현 타입을 직접 다루면 지도 교체가 불가능해진다.
@@ -69,3 +70,15 @@ abstract interface class MapViewAdapter {
   /// 좌표가 있으면 **전부 화면에 들어오도록 자동으로 맞춘다**(수동 줌 계산을 화면에 두지 않는다).
   Widget build({List<MapMarkerSpec> markers, List<MapRouteSpec> routes});
 }
+
+/// ⚠️ `bootstrap()` 에서 override 해야 하는 provider.
+///
+/// **provider 선언이 구현체 파일이 아니라 여기 있는 이유**(컨벤션 §5) —
+/// 구현체 파일에 두면 소비자가 `impl/...` 을 import 하게 되고, 그러면 구현을 갈아끼울 때
+/// 호출부를 전부 고쳐야 한다. 지도는 교체 후보(네이버·구글)가 실제로 있는 포트라
+/// 이 규칙이 특히 중요하다 — 지금 구조에서만 지도 교체가 화면 수정 없이 끝난다.
+final mapViewAdapterProvider = Provider<MapViewAdapter>(
+  (ref) => throw UnimplementedError(
+    'mapViewAdapterProvider 를 bootstrap() 에서 override 해야 합니다',
+  ),
+);

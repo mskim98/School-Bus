@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../storage/impl/secure_token_storage.dart';
+import '../storage/spec/token_storage.dart';
 import 'api_config.dart';
 import 'api_exception.dart';
 import 'api_response.dart';

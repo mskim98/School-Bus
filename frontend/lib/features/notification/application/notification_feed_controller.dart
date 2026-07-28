@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/ws/impl/stomp_gateway_impl.dart';
 import '../../../core/ws/spec/stomp_gateway.dart';
 import '../../../shared/domain/auth_session.dart';
 import '../../../shared/domain/role.dart';

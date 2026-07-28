@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_exception.dart';
-import '../../../core/location/impl/location_source_factory_impl.dart';
+import '../../../core/location/spec/location_source_factory.dart';
 import '../../../core/location/spec/location_source.dart';
 import '../../../core/location/spec/location_source_kind.dart';
 import '../../../core/map/spec/map_view_adapter.dart';

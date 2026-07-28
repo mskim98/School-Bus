@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_response.dart';
-import '../../../core/ws/impl/stomp_gateway_impl.dart';
 import '../../../core/ws/spec/stomp_gateway.dart';
 import 'dto/notification_dto.dart';
 

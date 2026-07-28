@@ -3,9 +3,19 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'app/app.dart';
+import 'core/api/api_config.dart';
 import 'core/api/spec/session_refresher.dart';
+import 'core/location/impl/location_source_factory_impl.dart';
+import 'core/location/spec/location_source_factory.dart';
+import 'core/map/impl/flutter_map_adapter.dart';
+import 'core/map/spec/map_view_adapter.dart';
+import 'core/storage/impl/secure_token_storage.dart';
+import 'core/storage/spec/token_storage.dart';
+import 'core/ws/impl/stomp_gateway_impl.dart';
+import 'core/ws/spec/stomp_gateway.dart';
 import 'features/auth/application/auth_session_refresher.dart';
 
 /// 앱 전역 초기화.
@@ -41,11 +51,36 @@ Future<void> bootstrap() async {
       runApp(
         ProviderScope(
           // 합성 지점(composition root) — core 가 선언만 해둔 포트에 실제 구현을 꽂는다.
-          // core 는 features 를 import 하지 않으므로(컨벤션 C-1) 배선은 여기서만 한다.
+          //
+          // **이 목록이 앱의 배선도다.** 포트의 provider 를 구현체 파일에 두면 소비자가
+          // `impl/...` 을 import 하게 되고, 그러면 구현을 갈아끼울 때 호출부를 전부 고쳐야 해
+          // 포트를 만든 의미가 사라진다(컨벤션 §5). 그래서 구현을 아는 파일은 여기 하나뿐이다.
+          //
+          // 기본 구현을 두지 않고 spec 쪽에서 UnimplementedError 를 던지게 한 이유 —
+          // 배선 누락은 조용히 넘어가는 것보다 첫 사용 시점에 바로 터지는 게 낫다.
           overrides: [
             sessionRefresherProvider.overrideWith(
               (ref) => AuthSessionRefresher(ref),
             ),
+            tokenStorageProvider.overrideWithValue(
+              const SecureTokenStorage(FlutterSecureStorage()),
+            ),
+            mapViewAdapterProvider.overrideWithValue(const FlutterMapAdapter()),
+            locationSourceFactoryProvider.overrideWithValue(
+              const LocationSourceFactoryImpl(),
+            ),
+            stompGatewayProvider.overrideWith((ref) {
+              final gateway = StompGatewayImpl(
+                url: ApiConfig.wsUrl,
+                tokenStorage: ref.watch(tokenStorageProvider),
+                // ⚠️ `read` 로 늦게 꺼낸다 — `apiClientProvider` 와 같은 이유로,
+                // 재발급 구현이 다시 이 그래프를 참조해도 순환이 성립하지 않게 하기 위함이다.
+                refreshTokens: () =>
+                    ref.read(sessionRefresherProvider).refresh(),
+              );
+              ref.onDispose(gateway.dispose);
+              return gateway;
+            }),
           ],
           child: const SchoolBusApp(),
         ),

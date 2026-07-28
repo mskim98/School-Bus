@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:school_bus/core/api/api_exception.dart';
-import 'package:school_bus/core/location/impl/location_source_factory_impl.dart';
 import 'package:school_bus/core/location/spec/location_source.dart';
 import 'package:school_bus/core/location/spec/location_source_factory.dart';
 import 'package:school_bus/core/location/spec/location_source_kind.dart';
