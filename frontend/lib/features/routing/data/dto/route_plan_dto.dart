@@ -13,6 +13,7 @@ class RoutePlanDto {
     required this.totalDurationS,
     required this.polyline,
     required this.stops,
+    this.version = 1,
   });
 
   final int id;
@@ -23,6 +24,9 @@ class RoutePlanDto {
 
   /// `DRAFT` → `RECOMMENDED` → `APPROVED` → `PUBLISHED`
   final String status;
+
+  /// 재계산 회차. 같은 버스·방향으로 다시 배차하면 서버가 이 값을 올린 **새 행**을 만든다.
+  final int version;
 
   final String serviceDate;
   final double totalDistanceM;
@@ -38,6 +42,8 @@ class RoutePlanDto {
     busId: json['busId'] as int,
     direction: json['direction'] as String,
     status: json['status'] as String,
+    // 관리자 목록에만 쓰는 값이라 없으면 1회차로 본다(기사 응답 검증에는 영향 없음).
+    version: (json['version'] as num?)?.toInt() ?? 1,
     serviceDate: json['serviceDate'] as String,
     totalDistanceM: (json['totalDistanceM'] as num?)?.toDouble() ?? 0,
     totalDurationS: (json['totalDurationS'] as num?)?.toDouble() ?? 0,

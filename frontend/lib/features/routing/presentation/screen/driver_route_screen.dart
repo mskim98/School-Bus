@@ -5,6 +5,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/map/impl/flutter_map_adapter.dart';
 import '../../../../core/map/spec/map_view_adapter.dart';
 import '../../../../core/ui/error_message.dart';
+import '../../../location/presentation/widget/driver_location_card.dart';
 import '../../application/driver_route_controller.dart';
 import '../../domain/route_plan.dart';
 import '../widget/route_stop_tile.dart';
@@ -37,14 +38,24 @@ class DriverRouteScreen extends ConsumerWidget {
             description: '관리자에게 버스 배차를 요청해 주세요.',
           );
         }
-        if (state.isEmpty) {
-          return const _EmptyState(
-            icon: Icons.route_outlined,
-            title: '오늘 배포된 노선이 없습니다',
-            description: '관리자가 배차를 확정하면 이곳에 노선이 표시됩니다.',
-          );
-        }
-        return _RouteView(state: state);
+
+        final content = state.isEmpty
+            ? const _EmptyState(
+                icon: Icons.route_outlined,
+                title: '오늘 배포된 노선이 없습니다',
+                description: '관리자가 배차를 확정하면 이곳에 노선이 표시됩니다.',
+              )
+            : _RouteView(state: state);
+
+        // 위치 보고 패널(C8)은 노선 유무와 상관없이 항상 위에 둔다 —
+        // 노선이 없어도 실 GPS 로는 보고할 수 있고, 무엇보다 기사가
+        // "내 위치가 나가고 있는지"를 항상 확인할 수 있어야 한다.
+        return Column(
+          children: [
+            DriverLocationCard(mockPath: state.current?.path ?? const []),
+            Expanded(child: content),
+          ],
+        );
       },
     );
   }

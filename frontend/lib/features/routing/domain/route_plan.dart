@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../../core/map/spec/map_view_adapter.dart';
 import '../data/dto/route_plan_dto.dart';
+import 'route_plan_status.dart';
 
 /// 운행 방향. 같은 학생이라도 방향에 따라 장소·순서가 다르다.
 enum RouteDirection {
@@ -36,6 +37,8 @@ class RoutePlan {
     required this.totalDuration,
     required this.path,
     required this.stops,
+    this.status = RoutePlanStatus.draft,
+    this.version = 1,
   });
 
   final int id;
@@ -50,6 +53,16 @@ class RoutePlan {
 
   final List<RouteStop> stops;
 
+  /// 승인 단계. 관리자 화면이 "제안"과 "배포됨"을 구분하는 데 쓴다.
+  ///
+  /// 기본값을 둔 건 이 필드를 나중에 덧붙였기 때문이고, 결손을 감추려는 게 아니다 —
+  /// 서버 응답에는 `status` 가 항상 있고 [fromDto] 는 언제나 실제 값을 채운다.
+  final RoutePlanStatus status;
+
+  /// 재계산 회차. 같은 버스·방향으로 다시 배차하면 서버가 기존 행을 고치지 않고
+  /// **version 을 올린 새 행**을 만든다 — 목록에 계획이 쌓이는 이유가 이것이다.
+  final int version;
+
   /// 사람이 읽는 거리 — `1566.0` → `1.6km`, `860` → `860m`
   String get distanceLabel => totalDistanceM >= 1000
       ? '${(totalDistanceM / 1000).toStringAsFixed(1)}km'
@@ -63,6 +76,18 @@ class RoutePlan {
     return '약 ${minutes ~/ 60}시간 ${minutes % 60}분';
   }
 
+  /// 서버가 쓰는 `yyyy-MM-dd`.
+  ///
+  /// 요청 쿼리(`serviceDate=`)와 화면 표시가 같은 형식이라 한 곳에 둔다 —
+  /// 두 군데서 각자 만들면 한쪽만 고쳐져 조회 결과가 어긋난다.
+  static String formatDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
+  String get serviceDateLabel => formatDate(serviceDate);
+
   static RoutePlan fromDto(RoutePlanDto dto) {
     return RoutePlan(
       id: dto.id,
@@ -74,6 +99,8 @@ class RoutePlan {
       totalDuration: Duration(seconds: dto.totalDurationS.round()),
       path: parsePolyline(dto.polyline),
       stops: dto.stops.map(RouteStop.fromDto).toList(growable: false),
+      status: RoutePlanStatus.fromWire(dto.status) ?? RoutePlanStatus.draft,
+      version: dto.version,
     );
   }
 
