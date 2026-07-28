@@ -32,7 +32,10 @@
   - 시안의 CSS 변수 → M3 역할색 매핑 완료. **`fromSeed` 실측 대조**로 오버라이드가 필요한 역할 5개를 특정(§1.2)
   - `ThemeExtension AppColors` 필요 항목 확정: success·warning·map 3계열(M3 `ColorScheme` 에 없음)
   - `FLUTTER_FRONTEND_PLAN.md` 에 포인터 2곳 추가(§6 P6 · §7)
-- [ ] ⬜ **D2** 에이전트 2개(`ui-implementer`·`design-system-auditor`) + 컨벤션 §9 **C-8** + `PROJECT_NOTES.md`
+- [x] ✅ **D2** 에이전트 2개(`ui-implementer`·`design-system-auditor`) + 컨벤션 §9 **C-8** + `PROJECT_NOTES.md`
+  - 전역 7개에 없는 역할이라 "에이전트 복제 금지" 정책과 충돌하지 않는다
+  - 체크리스트 분담을 명시: **C-1~C-7 = `convention-auditor` / C-8 = `design-system-auditor`** (중복 지적 방지)
+  - `PROJECT_NOTES.md` 에 프론트 전용 절 신설 — 이 둘만 `frontend/` 에서 동작한다는 사실이 없으면 백엔드 Gradle 사실을 잘못 적용한다
 - [ ] ⬜ **D3** 테마 토큰 코드화 — `app/theme/{app_theme,app_colors,app_typography,app_spacing}.dart`
 - [ ] ⬜ **D4** `core/ui` 공용 컴포넌트 — `AppStatusChip`·`AppActionButton`·`SkeletonBox`·`OfflineBanner` + 기존 4종 외형 교체
 - [ ] ⬜ **D5** 기사 — 로그인 · 운행 시작 *(에이전트)*
@@ -80,12 +83,12 @@
 
 ### 지금 상태
 
-- **D0·D1 완료·커밋됨**
+- **D0~D2 완료·커밋됨**
 - 기준선: `flutter analyze` 무경고 · `flutter test` **203/203** · Flutter 3.44.8 / Dart 3.12.2 (`/opt/homebrew/bin/flutter`)
 
 ### 다음에 할 일
 
-**D2** 부터 순서대로. D3·D4 가 끝나기 전에는 D5~D8 에이전트를 띄우지 않는다(공용 토큰이 없으면 화면이 매직넘버로 채워진다).
+**D3** 부터 순서대로. D3·D4 가 끝나기 전에는 D5~D8 에이전트를 띄우지 않는다(공용 토큰이 없으면 화면이 매직넘버로 채워진다).
 
 ---
 
