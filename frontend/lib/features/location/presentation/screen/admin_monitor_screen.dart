@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/map/impl/flutter_map_adapter.dart';
 import '../../../../core/map/spec/map_view_adapter.dart';
-import '../../../../core/ui/error_message.dart';
+import '../../../../core/ui/async_section.dart';
+import '../../../../core/ui/empty_view.dart';
 import '../../application/bus_monitor_controller.dart';
 import '../widget/monitored_bus_tile.dart';
 
@@ -58,18 +59,10 @@ class _AdminMonitorScreenState extends ConsumerState<AdminMonitorScreen>
   Widget build(BuildContext context) {
     final monitor = ref.watch(busMonitorControllerProvider);
 
-    return monitor.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: ErrorBanner(
-            error: error,
-            onRetry: () =>
-                ref.read(busMonitorControllerProvider.notifier).refresh(),
-          ),
-        ),
-      ),
+    return AsyncSection<BusMonitorState>(
+      value: monitor,
+      loadingLabel: '버스 위치를 불러오는 중',
+      onRetry: () => ref.read(busMonitorControllerProvider.notifier).refresh(),
       data: _buildMonitor,
     );
   }
@@ -139,37 +132,15 @@ class _MapPanel extends ConsumerWidget {
     ];
 
     if (markers.isEmpty) {
-      return const _EmptyMap();
+      // 버스는 등록돼 있는데 아직 아무도 좌표를 보내지 않은 상태 — 관리자가 할 일은
+      // 기사 쪽 위치 전송을 켜는 것이므로, 목록의 "등록된 버스가 없습니다"와 구분한다.
+      return const EmptyView(
+        icon: Icons.location_searching,
+        title: '아직 위치를 보고한 버스가 없습니다',
+        description: '기사 앱에서 위치 전송을 켜면 이곳에 표시됩니다.',
+      );
     }
     return adapter.build(markers: markers);
-  }
-}
-
-class _EmptyMap extends StatelessWidget {
-  const _EmptyMap();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.location_searching,
-            size: 40,
-            color: theme.colorScheme.outline,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Text('아직 위치를 보고한 버스가 없습니다', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            '기사 앱에서 위치 전송을 켜면 이곳에 표시됩니다.',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -184,14 +155,11 @@ class _BusListPanel extends ConsumerWidget {
     final controller = ref.read(busMonitorControllerProvider.notifier);
 
     if (state.buses.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Text(
-            '등록된 버스가 없습니다',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-        ),
+      // 지도의 빈 상태와 원인이 다르다 — 이쪽은 관제할 대상 자체가 없는 상태다.
+      return const EmptyView(
+        icon: Icons.directions_bus_outlined,
+        title: '등록된 버스가 없습니다',
+        description: '버스 관리에서 버스를 먼저 등록하면 이곳에서 위치를 볼 수 있습니다.',
       );
     }
 

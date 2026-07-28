@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/ui/loading_view.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/presentation/screen/login_screen.dart';
 import '../../features/location/presentation/screen/admin_monitor_screen.dart';
@@ -166,11 +167,13 @@ class _AuthRefreshNotifier extends ChangeNotifier {
 }
 
 /// 저장된 토큰으로 세션을 복원하는 동안 잠깐 머무는 화면.
+///
+/// 문구를 붙이지 않는다 — 대개 한순간에 끝나서 글자가 깜빡이기만 한다.
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return const Scaffold(body: LoadingView());
   }
 }

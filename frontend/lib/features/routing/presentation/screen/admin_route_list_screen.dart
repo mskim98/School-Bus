@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
-import '../../../../core/ui/error_message.dart';
+import '../../../../core/ui/async_section.dart';
+import '../../../../core/ui/empty_view.dart';
 import '../../application/admin_route_list_controller.dart';
 import '../../application/admin_tenant_provider.dart';
 import '../../domain/route_plan.dart';
@@ -28,7 +29,11 @@ class AdminRouteListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tenant = ref.watch(adminTenantProvider);
     if (tenant == null) {
-      return const Center(child: Text('관리자로 로그인해야 노선을 볼 수 있습니다'));
+      return const EmptyView(
+        icon: Icons.lock_outline,
+        title: '관리자 전용 화면입니다',
+        description: '관리자 계정으로 로그인하면 노선을 볼 수 있습니다.',
+      );
     }
 
     final selectedId = _selectedPlanId(context);
@@ -96,18 +101,15 @@ class _PlanListPane extends ConsumerWidget {
           ),
         ),
         Expanded(
-          child: plans.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: ErrorBanner(
-                error: error,
-                onRetry: () =>
-                    ref.read(adminRoutePlansProvider.notifier).refresh(),
-              ),
-            ),
+          child: AsyncSection(
+            value: plans,
+            onRetry: () => ref.read(adminRoutePlansProvider.notifier).refresh(),
             data: (state) => state.isEmpty
-                ? const _EmptyPlans()
+                ? const EmptyView(
+                    icon: Icons.route_outlined,
+                    title: '아직 만들어진 노선이 없습니다',
+                    description: '배차 화면에서 제안을 받고 확정하면 이곳에 노선이 쌓입니다.',
+                  )
                 : _PlanList(state: state, selectedId: selectedId),
           ),
         ),
@@ -184,15 +186,9 @@ class _PlanDetailPane extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(adminRoutePlanDetailProvider(planId));
 
-    return detail.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: ErrorBanner(
-          error: error,
-          onRetry: () => ref.invalidate(adminRoutePlanDetailProvider(planId)),
-        ),
-      ),
+    return AsyncSection(
+      value: detail,
+      onRetry: () => ref.invalidate(adminRoutePlanDetailProvider(planId)),
       data: (plan) => _PlanDetail(plan: plan, showBackButton: showBackButton),
     );
   }
@@ -214,7 +210,11 @@ class _PlanDetail extends StatelessWidget {
         Expanded(
           flex: 4,
           child: plan.stops.isEmpty
-              ? const Center(child: Text('정차 지점이 없습니다'))
+              ? const EmptyView(
+                  icon: Icons.wrong_location_outlined,
+                  title: '정차 지점이 없습니다',
+                  description: '배차 화면에서 다시 제안을 받으면 정차 순서가 채워집니다.',
+                )
               : ListView.separated(
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                   itemCount: plan.stops.length,
@@ -292,40 +292,6 @@ class _NoSelection extends StatelessWidget {
       child: Text(
         '왼쪽에서 노선을 선택하면 경로와 정차 순서를 볼 수 있습니다',
         style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor),
-      ),
-    );
-  }
-}
-
-class _EmptyPlans extends StatelessWidget {
-  const _EmptyPlans();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.route_outlined,
-              size: 40,
-              color: theme.colorScheme.outline,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text('아직 만들어진 노선이 없습니다', style: theme.textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              '배차 화면에서 제안을 받고 확정하면 이곳에 노선이 쌓입니다.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.hintColor,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -4,7 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
-import '../../../../core/ui/error_message.dart';
+import '../../../../core/ui/async_section.dart';
+import '../../../../core/ui/empty_view.dart';
 import '../../application/admin_dispatch_controller.dart';
 import '../../application/admin_tenant_provider.dart';
 import '../../domain/auto_assign_result.dart';
@@ -28,7 +29,11 @@ class AdminDispatchScreen extends ConsumerWidget {
     final dispatch = ref.watch(adminDispatchControllerProvider);
 
     if (tenant == null) {
-      return const _Centered(child: Text('관리자로 로그인해야 배차를 진행할 수 있습니다'));
+      return const EmptyView(
+        icon: Icons.lock_outline,
+        title: '관리자 전용 화면입니다',
+        description: '관리자 계정으로 로그인하면 배차를 진행할 수 있습니다.',
+      );
     }
 
     return Column(
@@ -36,18 +41,18 @@ class AdminDispatchScreen extends ConsumerWidget {
         _DispatchHeader(tenant: tenant),
         const Divider(height: 1),
         Expanded(
-          child: dispatch.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => _Centered(
-              child: ErrorBanner(
-                error: error,
-                onRetry: () => ref
-                    .read(adminDispatchControllerProvider.notifier)
-                    .propose(),
-              ),
-            ),
+          child: AsyncSection(
+            value: dispatch,
+            onRetry: () =>
+                ref.read(adminDispatchControllerProvider.notifier).propose(),
             data: (state) => switch (state.stage) {
-              DispatchStage.idle => const _IdleState(),
+              DispatchStage.idle => const EmptyView(
+                icon: Icons.alt_route_outlined,
+                title: '아직 받은 제안이 없습니다',
+                description:
+                    '방향과 운행일을 고르고 "제안 받기"를 누르면 버스별 노선을 계산해 보여줍니다.\n'
+                    '제안 단계에서는 학생 배정이 바뀌지 않습니다.',
+              ),
               DispatchStage.review => _ReviewView(state: state),
               DispatchStage.confirmed => _ConfirmedView(state: state),
             },
@@ -138,36 +143,6 @@ class _ServiceDateField extends ConsumerWidget {
     ref
         .read(adminDispatchControllerProvider.notifier)
         .selectServiceDate(picked);
-  }
-}
-
-class _IdleState extends StatelessWidget {
-  const _IdleState();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return _Centered(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.alt_route_outlined,
-            size: 40,
-            color: theme.colorScheme.outline,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Text('아직 받은 제안이 없습니다', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            '방향과 운행일을 고르고 "제안 받기"를 누르면 버스별 노선을 계산해 보여줍니다.\n'
-            '제안 단계에서는 학생 배정이 바뀌지 않습니다.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -401,15 +376,4 @@ class _ConfirmedView extends ConsumerWidget {
       ],
     );
   }
-}
-
-class _Centered extends StatelessWidget {
-  const _Centered({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(padding: const EdgeInsets.all(AppSpacing.lg), child: child),
-  );
 }

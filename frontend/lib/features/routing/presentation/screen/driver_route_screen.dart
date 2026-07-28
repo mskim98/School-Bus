@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/map/impl/flutter_map_adapter.dart';
 import '../../../../core/map/spec/map_view_adapter.dart';
-import '../../../../core/ui/error_message.dart';
+import '../../../../core/ui/async_section.dart';
+import '../../../../core/ui/empty_view.dart';
 import '../../../location/presentation/widget/driver_location_card.dart';
 import '../../application/driver_route_controller.dart';
 import '../../domain/route_plan.dart';
@@ -20,19 +21,13 @@ class DriverRouteScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final routeState = ref.watch(driverRouteControllerProvider);
 
-    return routeState.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => _Centered(
-        child: ErrorBanner(
-          error: error,
-          onRetry: () =>
-              ref.read(driverRouteControllerProvider.notifier).refresh(),
-        ),
-      ),
+    return AsyncSection(
+      value: routeState,
+      onRetry: () => ref.read(driverRouteControllerProvider.notifier).refresh(),
       data: (state) {
         // "버스가 없다"와 "노선이 없다"를 나눠 안내한다 — 기사가 할 행동이 다르다.
         if (!state.hasBus) {
-          return const _EmptyState(
+          return const EmptyView(
             icon: Icons.no_transfer_outlined,
             title: '배차된 버스가 없습니다',
             description: '관리자에게 버스 배차를 요청해 주세요.',
@@ -40,7 +35,7 @@ class DriverRouteScreen extends ConsumerWidget {
         }
 
         final content = state.isEmpty
-            ? const _EmptyState(
+            ? const EmptyView(
                 icon: Icons.route_outlined,
                 title: '오늘 배포된 노선이 없습니다',
                 description: '관리자가 배차를 확정하면 이곳에 노선이 표시됩니다.',
@@ -196,48 +191,4 @@ class _Metric extends StatelessWidget {
       ),
     );
   }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.icon,
-    required this.title,
-    required this.description,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return _Centered(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 40, color: theme.colorScheme.outline),
-          const SizedBox(height: AppSpacing.md),
-          Text(title, style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            description,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Centered extends StatelessWidget {
-  const _Centered({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(padding: const EdgeInsets.all(AppSpacing.lg), child: child),
-  );
 }

@@ -415,27 +415,55 @@ DB/Redis/Kafka 포트(5432·6379·29092)만 호스트에 남겼다 — DB 툴 �
     실 백엔드 E2E — 배차 제안 → 확정(PUBLISHED) → `GET /api/route-plans/driver/1` 로 **정차 3곳·polyline 172점** 수신 확인
   - ⚠️ **인프라 결함 발견·수정**: compose 가 `backend/.env` 를 로드하지 않아 NCP 네이버 Directions 키가 컨테이너에 없었다.
     배차 API 가 **401 → "서버 오류"** 로만 보였다. `env_file`(`required: false`) 추가로 해결
-- [ ] ⬜ **C7** 승하차 기록(`POST /api/ride-events`) + 오늘 명단 조회
-- [ ] ⬜ **C8** 버스 위치 주기 보고(`POST /api/locations/bus`) — **Mock / 실GPS 토글**(§8 D2)
+> ⚠️ **C7~C13 은 에이전트 4개가 병렬로 작성했고, 그중 3개가 토큰 한도로 중도 실패**했다(§7).
+> 그래서 아래 체크는 **에이전트의 자기보고가 아니라 사후 검증 결과**(커밋 `33de6e0` 통합 + §7 API 재현)를 근거로 한다.
+
+- [x] ✅ **C7** 승하차 기록(`POST /api/ride-events`) + 오늘 명단 조회
+  - `features/rideevent/` — `RideEventDto`/`RideEvent`/`RosterStudent` · repository · `DriverRosterController` · 명단 화면
+  - `features/drivesession/` — 운행 시작/종료(`DriveSession`) 가 명단 조회의 선행 조건이라 같이 들어왔다
+  - **검증**: 운행 시작 후 명단에 **실제 학생 이름**(김민준·이서연·박도윤) 표시, `ALIGHT` 기록 성공(§7)
+- [x] ✅ **C8** 버스 위치 주기 보고(`POST /api/locations/bus`) — **Mock / 실GPS 토글**(§8 D2)
   - `LocationSource` 추상 + `MockLocationSource`(노선 polyline 따라 이동) / `GpsLocationSource`(`geolocator`)
   - 기사 화면 상단에 토글 스위치, 기본값 **Mock**. 5,000ms 주기 전송
+  - **검증**: 기사 위치 보고 성공(§7)
 
 ### P3 — 관리자 콘솔
 
-- [ ] ⬜ **C9** 관제 지도 + 3초 폴링(§3.6) — 라이프사이클 연동 타이머 정리 포함
-- [ ] ⬜ **C10** 배차 제안 → 검토 → 확정 흐름(`excludedStudentNames` 경고 배너 포함)
-- [ ] ⬜ **C11** 노선 목록 / 상세
+- [x] ✅ **C9** 관제 지도 + 3초 폴링(§3.6) — 라이프사이클 연동 타이머 정리 포함
+  - `features/location/` — `BusMonitorController` · `MonitoredBus` · `monitored_bus_tile`
+  - **검증**: 기사가 보고한 좌표가 관제에서 그대로 조회됨(`3호차 37.504,127.03`, §7)
+- [x] ✅ **C10** 배차 제안 → 검토 → 확정 흐름(`excludedStudentNames` 경고 배너 포함)
+  - `AdminDispatchController` · `AutoAssignResult` · `excluded_students_banner`
+- [x] ✅ **C11** 노선 목록 / 상세
+  - `AdminRouteListController` · `route_plan_card` · `route_plan_map`(C6 의 `MapViewAdapter` 포트 재사용)
 
 ### P4 — 실시간
 
-- [ ] ⬜ **C12** STOMP 연결·구독·재연결(§3.7) — 재연결 시 토큰 재주입
-- [ ] ⬜ **C13** 알림함: REST 초기 로드 + WS 덧붙이기(기사=`/user/queue`, 관리자=`/topic/tenant/{id}`)
-  - 검증: 기사가 승하차 기록 → 관리자 화면에 알림이 즉시 뜨는지(2개 브라우저 창)
+- [x] ✅ **C12** STOMP 연결·구독·재연결(§3.7) — 재연결 시 토큰 재주입
+  - `core/ws/{spec,impl}` — `StompGateway` 포트 + `StompGatewayImpl`. 화면은 `stomp_dart_client` 를 모른다
+  - **검증**: 프록시 경유 CONNECT + 구독 + push 동작 확인(일회성 프로브, §7)
+- [x] ✅ **C13** 알림함: REST 초기 로드 + WS 덧붙이기(기사=`/user/queue`, 관리자=`/topic/tenant/{id}`)
+  - `NotificationFeedController` · `notification_tile` · `connection_status_chip`
+  - **검증**: 알림 11건 누적, 승하차·인계 알림이 학생 이름과 함께 수신됨(§7)
+  - ⚠️ **미검증**: 2개 브라우저 창을 띄운 실시간 육안 확인은 아직 안 했다(§7 "새 세션이 이어서 할 일" 1번)
 
 ### P5 — 마감
 
-- [ ] ⬜ **C14** 로딩/빈상태/에러 UI 통일 + 전체 시나리오 통합 점검
-  - 검증: `docker compose down && up` 후 시드 상태에서 기사·관리자 전 화면 1회씩 통과
+- [~] 🔶 **C14** 로딩/빈상태/에러 UI 통일 ✅ / 전체 시나리오 통합 점검 ⬜
+  - **공용 위젯 4종 신설**(`core/ui/`) — `AsyncSection<T>`(loading·error·data 3갈래) · `LoadingView` · `EmptyView` · `ErrorView`
+  - ⭐ `AsyncSection` 을 굳이 만든 이유: 화면에서 `value.when(...)` 을 직접 쓰면 급할 때 `maybeWhen`·`value.value`
+    로 **한 갈래를 빼먹기 쉽고, 그러면 실패가 "영원한 로딩"으로 보여** 원인을 못 찾는다. 래퍼를 거치면 뺄 방법이 없다
+  - 제거한 중복: 빈상태 클래스 **5개**(`_EmptyState`×2·`_EmptyFeed`·`_EmptyMap`·`_EmptyPlans`) · `_Centered` 래퍼 3개 ·
+    산재한 `Center(child: CircularProgressIndicator())`. **순증감 +170 / −395 줄**
+  - 빈 상태 문구 규칙: "데이터 없음"이 아니라 **사용자가 지금 무엇을 하면 되는지**를 적는다.
+    원인이 다른 빈 상태는 합치지 않는다(예 "배차된 버스 없음"=관리자에게 요청 vs "배포된 노선 없음"=기다리면 됨)
+  - ⚠️ **인라인 배너로 남긴 것**: 알림함의 `liveError`(WS 끊김). 화면 전체를 에러로 덮으면
+    **이미 받아둔 알림을 못 보게 되는 회귀**라 목록은 살리고 배너로만 알린다
+  - 버튼 안의 작은 인디케이터는 "화면 로딩"이 아니라 "동작 진행 표시"라 그대로 뒀다
+  - **검증**: `flutter analyze` 무경고 · `dart format` 변경 0 · `flutter test` **203/203**
+    (신규 위젯 테스트 9건 — 이 저장소 최초의 위젯 테스트다. 기존 194건은 전부 단위 테스트였다)
+  - ⬜ **남은 것**: 브라우저에서 전 시나리오 육안 점검
+    (`docker compose down && up` 후 시드 상태에서 기사·관리자 전 화면 1회씩)
 
 ---
 
@@ -477,6 +505,24 @@ DB/Redis/Kafka 포트(5432·6379·29092)만 호스트에 남겼다 — DB 툴 �
 **프록시 경유 STOMP CONNECT + 구독 + push 가 실제로 동작한다**(일회성 프로브로 확인 후 프로브는 삭제).
 프록시 도입 이후 남아 있던 가장 큰 불확실성이었다.
 
+### ✅ 컨벤션 감사 완료 (2026-07-29)
+
+`convention-auditor` 로 `lib/` 86개 파일 전수 감사. 보고서: **`frontend/report/2026-07-29-flutter-convention-audit.md`**
+
+걱정했던 것과 달리 **위반이 단 하나의 구조적 지점에 집중**돼 있었다. C-1(계층)·C-3(에러처리)·C-4(하드코딩)·
+C-6(네이밍) 은 전부 **0건**, C-7 기계 검사도 통과. 중도 실패한 에이전트들의 산출물 자체는 깔끔했다.
+
+| 심각도 | 항목 | 상태 |
+|---|---|---|
+| **High** | **C-5** 포트 4종(`TokenStorage`·`StompGateway`·`LocationSourceFactory`·`MapViewAdapter`)의 provider 가 `spec/` 이 아니라 **`impl/` 파일에 선언**돼 소비자 7개 파일이 구현체를 직접 import | ⬜ 미수정 |
+| Medium | `notification_tile.dart` 가 presentation 에서 `NotificationDto` 직접 사용 (§4 예외 인정 여부 판단 필요) | ⬜ 판단 대기 |
+| Medium | DTO 6곳의 근거 없는 `?? ''`/`?? 0` — 서버 계약 대조 필요 | ⬜ 판단 대기 |
+| Low | `MonitoredBus.merge` 위치 · `SizedBox(height: 320)` 매직넘버 2곳 | ⬜ |
+
+> **High 항목이 왜 중요한가**: §5 의 존재 이유는 "새 구현체로 갈아탈 때 **호출부를 수정하지 않는다**" 인데,
+> provider 가 구현체 파일에 있으면 지도를 OSM→네이버로 바꾸는 순간 화면 7곳의 import 를 전부 고쳐야 한다.
+> **포트를 만들어 놓고 포트의 효과는 못 얻는 상태.** 4개 포트 전부 같은 모양이라 실수가 아니라 습관이었다.
+
 ### 🔜 새 세션이 이어서 할 일 (우선순위 순)
 
 1. **컨테이너 재빌드 후 브라우저 확인** — 이게 가장 시급하다. 테스트는 통과했지만 화면을 아무도 안 봤다
@@ -487,14 +533,13 @@ DB/Redis/Kafka 포트(5432·6379·29092)만 호스트에 남겼다 — DB 툴 �
    ```
    확인 항목: 기사 명단에 **학생 이름**이 뜨는가(운행 시작 후) · 관제 지도에 버스가 찍히는가 ·
    배차 제안→확정이 되는가 · 알림이 실시간으로 들어오는가
-2. **`convention-auditor` 에이전트로 컨벤션 감사** — `FLUTTER_CODE_CONVENTIONS.md` §9 체크리스트 기준
-   (사용자가 요청한 절차다. 중단된 에이전트들이 자체 검증을 못 마쳤으니 특히 필요하다)
-3. **C14** — 로딩/빈상태/에러 UI 통일 + 전체 시나리오 통합 점검
+2. **감사 High 항목 수정** — 포트 provider 정의를 `impl/` → `spec/` 로 이동
+3. **감사 Medium/Low 항목 판단** — 위 표 참조
 
 ### 남은 작업
 
-- **C14** — 로딩/빈상태/에러 UI 통일 + 전체 시나리오 통합 점검
-- (C7~C13 이 위에서 마무리되면 MVP 프론트는 완료)
+- **C14 의 "전체 시나리오 통합 점검"** (UI 통일 부분은 완료)
+- 컨벤션 감사 지적사항 (위 표)
 
 ### 환경
 

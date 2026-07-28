@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../core/ui/async_section.dart';
+import '../../../../core/ui/empty_view.dart';
 import '../../../../core/ui/error_message.dart';
 import '../../../drivesession/application/drive_session_controller.dart';
 import '../../application/driver_roster_controller.dart';
@@ -24,18 +26,13 @@ class DriverRosterScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sessionState = ref.watch(driveSessionControllerProvider);
 
-    return sessionState.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => _Centered(
-        child: ErrorBanner(
-          error: error,
-          onRetry: () =>
-              ref.read(driveSessionControllerProvider.notifier).refresh(),
-        ),
-      ),
+    return AsyncSection(
+      value: sessionState,
+      onRetry: () =>
+          ref.read(driveSessionControllerProvider.notifier).refresh(),
       data: (state) {
         if (!state.hasBus) {
-          return const _EmptyState(
+          return const EmptyView(
             icon: Icons.no_transfer_outlined,
             title: '배차된 버스가 없습니다',
             description: '관리자가 버스를 배정하면 운행을 시작할 수 있습니다.',
@@ -59,15 +56,11 @@ class _RosterView extends ConsumerWidget {
     return Column(
       children: [
         Expanded(
-          child: rosterAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => _Centered(
-              child: ErrorBanner(
-                error: error,
-                onRetry: () =>
-                    ref.read(driveSessionControllerProvider.notifier).refresh(),
-              ),
-            ),
+          child: AsyncSection(
+            value: rosterAsync,
+            onRetry: () =>
+                ref.read(driveSessionControllerProvider.notifier).refresh(),
+            loadingLabel: '명단을 불러오는 중',
             data: (state) => _RosterList(state: state),
           ),
         ),
@@ -86,10 +79,10 @@ class _RosterList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final direction = state.direction;
     if (state.students.isEmpty || direction == null) {
-      return const _EmptyState(
+      return const EmptyView(
         icon: Icons.groups_outlined,
         title: '오늘 태울 학생이 없습니다',
-        description: '결석 신고된 학생은 명단에서 자동으로 빠집니다.',
+        description: '결석 신고된 학생은 명단에서 자동으로 빠집니다. 태울 학생이 없으면 바로 운행을 종료해도 됩니다.',
       );
     }
 
@@ -262,49 +255,4 @@ class _EndDriveBar extends ConsumerWidget {
       ),
     );
   }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.icon,
-    required this.title,
-    required this.description,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return _Centered(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 40, color: theme.colorScheme.outline),
-          const SizedBox(height: AppSpacing.md),
-          Text(title, style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            description,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Centered extends StatelessWidget {
-  const _Centered({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(padding: const EdgeInsets.all(AppSpacing.lg), child: child),
-  );
 }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../core/ui/async_section.dart';
+import '../../../../core/ui/empty_view.dart';
 import '../../../../core/ui/error_message.dart';
 import '../../application/notification_feed_controller.dart';
 import '../widget/connection_status_chip.dart';
@@ -30,12 +32,11 @@ class AdminNotificationScreen extends ConsumerWidget {
         constraints: const BoxConstraints(maxWidth: _maxContentWidth),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.md),
-          child: feed.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            // 이력 조회 자체가 실패한 경우 — 보여줄 게 없으니 화면 전체가 에러다.
-            error: (error, _) => Center(
-              child: ErrorBanner(error: error, onRetry: controller.refresh),
-            ),
+          // 이력 조회 자체가 실패하면 보여줄 게 없으니 화면 전체가 에러다.
+          // (실시간 스트림만 끊긴 경우는 아래 [_FeedBody] 의 인라인 배너로 처리한다.)
+          child: AsyncSection<NotificationFeedState>(
+            value: feed,
+            onRetry: controller.refresh,
             data: (state) => _FeedBody(state: state, controller: controller),
           ),
         ),
@@ -64,7 +65,13 @@ class _FeedBody extends StatelessWidget {
         ],
         Expanded(
           child: state.isEmpty
-              ? const _EmptyFeed()
+              // 빈 배열은 에러가 아니다(컨벤션 §7-4) — 아직 아무 일도 없었을 뿐이다.
+              ? const EmptyView(
+                  icon: Icons.notifications_none,
+                  title: '받은 알림이 없습니다',
+                  description:
+                      '승하차·SOS 같은 일이 생기면 이곳에 바로 쌓입니다. 그대로 두고 기다리면 됩니다.',
+                )
               : _FeedList(state: state, controller: controller),
         ),
       ],
@@ -133,31 +140,6 @@ class _FeedList extends StatelessWidget {
           isNew: state.justArrivedIds.contains(item.id),
         );
       },
-    );
-  }
-}
-
-/// 빈 배열은 에러가 아니다(컨벤션 §7-4) — 아직 아무 일도 없었을 뿐이다.
-class _EmptyFeed extends StatelessWidget {
-  const _EmptyFeed();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.notifications_none,
-            size: AppSpacing.xl,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text('받은 알림이 없습니다', style: theme.textTheme.bodyMedium),
-        ],
-      ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/ui/error_message.dart';
+import '../../../../core/ui/loading_view.dart';
 import '../../../drivesession/application/drive_session_controller.dart';
 import '../../application/driver_roster_controller.dart';
 
@@ -62,10 +63,8 @@ class EndDriveSheet extends ConsumerWidget {
             const SizedBox(height: AppSpacing.md),
 
             if (!isRosterReady)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
-                child: Center(child: CircularProgressIndicator()),
-              )
+              // 명단을 읽는 동안 종료 버튼이 잠긴다 — 왜 못 누르는지 문구로 알린다.
+              const LoadingView(label: '탑승 명단을 확인하는 중')
             else if (onboard.isEmpty)
               _ClearBanner(theme: theme)
             else
