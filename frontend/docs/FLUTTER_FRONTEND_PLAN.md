@@ -339,9 +339,12 @@ server {
   - `BusController.myBus()` (메서드 레벨 `@PreAuthorize("hasRole('DRIVER')")`로 클래스 레벨 관리자 전용 규칙을 덮어씀)
     + `BusQueryService.getMyBus()` + `BusRepository.findByDriverIdOrderByIdAsc()`
   - Swagger `"00. MVP 사용 API"` 이중 태깅 + `MVP_API_SPEC.md` §2.3 신설(17→18)
-  - **검증**: `BusQueryServiceTest` 3케이스 추가(정상·담당버스없음 404·복수버스 시 첫 건) → `./gradlew test --tests '*BusQueryServiceTest*'` 통과.
-    전체 `./gradlew test` 100개 중 99개 통과, `BackendApplicationTests.contextLoads()` 1개는 **Docker 미기동(Postgres 연결 실패)** 으로 실패 — 환경 문제
-  - ⏳ **미검증**: Docker 기동 후 `driver@school.com`으로 실제 호출(3호차 반환) — 다음 세션에서 확인할 것
+  - **검증 완료(2026-07-28, Docker 기동 상태)**:
+    - `./gradlew test` **100/100 통과** (신규 3케이스: 정상·담당버스없음 404·복수버스 시 첫 건)
+    - 실호출 `GET /api/buses/me` — `driver@school.com` → `{id:1, name:"3호차", driverId:3, driverName:"박기사", onboard:3}`
+    - 권한 경계: ADMIN→403 · STUDENT→403 · 미인증→401 · `GET /api/buses`(관리자)는 여전히 200
+      → 메서드 레벨 `@PreAuthorize`가 클래스 레벨을 의도대로 덮어쓰고, 기존 관리자 API는 영향 없음
+    - Swagger `"00. MVP 사용 API"` 그룹 `/v3/api-docs` 실측 **18개**(`/api/buses/me` 포함) — 명세서와 일치
 - [ ] ⛔ **C1** Flutter 프로젝트 생성(`flutter create`) + `pubspec.yaml` 의존성 + §2 폴더 골격
   - **블록: 로컬에 Flutter SDK 미설치** (§9 환경 참조). 설치 전엔 `flutter create`·`pub get`·`analyze` 어느 것도 실행 불가
   - 검증: `flutter analyze` 무경고, `flutter run -d chrome` 기본 화면 표시
@@ -393,13 +396,12 @@ server {
 > **한 항목(C*)을 끝낼 때마다 §6 체크박스와 이 절을 갱신하고 커밋한다.** 다음 세션은 이 문서만 읽고 이어간다.
 > 항목을 마치지 않은 채 다음으로 넘어가지 않는다.
 
-- **마지막 완료 항목**: **C0** — 백엔드 `GET /api/buses/me` 신설 (커밋 `6df3b28`, 단위테스트 통과)
+- **마지막 완료 항목**: **C0 완전 검증 완료** — 백엔드 `GET /api/buses/me` (단위테스트 100/100 + 실호출 + 권한경계 4건 + Swagger 18개)
 - **현재 진행 중**: **C2 일부** — Docker 산출물 3개 작성 완료, compose 갱신은 C1 이후로 보류
 - **다음 할 일**: **⛔ C1 — Flutter SDK 설치 대기 중** (§9). 설치되면 `flutter create` → 의존성 → 폴더 골격
-- **대기 중인 검증** (환경 복구 후 한 번에 처리):
-  1. `GET /api/buses/me` 실호출 — `driver@school.com` 로그인 후 3호차(busId=1) 반환 확인 (C0)
-  2. `./gradlew test` 100/100 — 현재 `contextLoads()` 1건이 Postgres 미기동으로 실패 중
-  3. `docker compose up -d --build` → `localhost:3000` 접속 (C2)
+- **인프라 상태**: `docker compose up -d --build` 완료 — postgres(healthy)·redis·kafka·backend 4개 기동 중.
+  중단됐다면 §9의 PATH를 잡고 다시 올릴 것(볼륨이 없어 `down` 후 `up`이면 시드 상태로 리셋된다)
+- **남은 검증**: `docker compose up` 후 `localhost:3000` 접속 (C2 — C1 완료가 선행)
 - **환경 메모**: Docker(postgres/redis/kafka/backend)는 **사용자가 직접 켠다** — 필요할 때 요청할 것
 
 ---
@@ -437,23 +439,30 @@ MVP에서는 시드 기준 `tenantId=1`로 고정하고 화면 상단에 "고정
 
 ## 9. 리스크 / 전제
 
-### ⛔ 현재 환경 상태 (2026-07-28 확인) — C1 블로커
+### 🔧 로컬 환경 — Docker CLI가 PATH에 없다 (2026-07-28 확인)
 
-로컬 개발 머신에 **둘 다 없다.** 사용자가 설치해야 진행 가능하다.
+**Docker Desktop은 `/Applications/Code/Docker.app`에 설치돼 있다**(사용자가 `/Applications`를 용도별 폴더로 정리해서 쓴다).
+그런데 `/usr/local/bin/docker`는 옛 경로 `/Applications/Docker.app/...`을 가리키는 **끊어진 심볼릭 링크**라
+`which docker`가 실패한다 — "Docker 미설치"로 오판하기 쉽다.
 
-| 도구 | 상태 | 확인 방법 |
-|---|---|---|
-| **Flutter SDK** | ❌ 미설치 | `which flutter` → not found |
-| **Docker Desktop** | ❌ 미설치 | `/usr/local/bin/docker`가 `/Applications/Docker.app`을 가리키는 **끊어진 심볼릭 링크**로 남아 있다(과거 설치 흔적) |
+**셸에서 docker를 쓰려면 PATH를 먼저 잡는다:**
 
 ```bash
-brew install --cask flutter        # Flutter SDK
-brew install --cask docker         # Docker Desktop (설치 후 앱을 한 번 실행해야 데몬이 뜬다)
-flutter doctor                     # 설치 확인 — Chrome 항목이 ✓ 여야 Web 빌드 가능
+export PATH="/Applications/Code/Docker.app/Contents/Resources/bin:$PATH"
+docker compose up -d --build      # Docker 29.4.1 / Compose v5.1.3 확인됨
 ```
 
-> Docker가 없으면 백엔드·DB도 못 띄운다 → `BackendApplicationTests.contextLoads()`가 계속 실패하고
-> API 실호출 검증도 전부 막힌다. **Flutter보다 Docker가 먼저다.**
+> `find`로 앱을 찾을 때 주의 — 이 환경의 셸은 rtk 프록시를 거치면서 **`find` 출력이 뭉개진다**
+> (`0 for '*docker*'`처럼 잘못된 요약이 나온다). 파일 존재 확인은 `ls`나 `rtk proxy find`를 쓸 것.
+
+### ⛔ C1 블로커 — Flutter SDK 미설치
+
+전역 검색 결과 SDK가 없다(`~/.oh-my-zsh/plugins/flutter`는 zsh 자동완성 플러그인이지 SDK가 아니다).
+
+```bash
+brew install --cask flutter
+flutter doctor                     # Chrome 항목이 ✓ 여야 Web 빌드 가능
+```
 
 ### 기타
 
