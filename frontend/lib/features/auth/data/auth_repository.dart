@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/api/api_exception.dart';
 import '../../../core/api/api_response.dart';
 import '../../../core/storage/impl/secure_token_storage.dart';
 import '../../../core/storage/spec/token_storage.dart';
@@ -60,6 +61,26 @@ class AuthRepository {
   /// 인터셉터가 재발급하므로, 여기서 미리 검사하면 같은 판단이 두 군데로 갈라진다.
   Future<AuthSession?> restore() async {
     return JwtDecoder.toSession(await _storage.readAccessToken());
+  }
+
+  /// 기사의 담당 busId. 담당 버스가 없으면(404) null.
+  ///
+  /// `/api/buses` 가 아니라 여기(auth)에 두는 이유 — 이건 버스 관리 기능이 아니라
+  /// **세션을 완성하는 단계**다(`MVP_API_SPEC.md` §2.3 "세션 부트스트랩").
+  /// 기사용 API 가 전부 busId 를 요구하는데 토큰에는 없어서, 로그인 직후 1회 받아
+  /// 세션에 얹는다. bus 를 별도 feature 로 빼면 auth 가 그걸 import 해야 해서
+  /// feature 간 의존이 생긴다(컨벤션 C-1).
+  Future<int?> fetchMyBusId() async {
+    try {
+      return await _client.get(
+        '/api/buses/me',
+        decode: (data) => (data! as Map<String, dynamic>)['id'] as int,
+      );
+    } on ApiException catch (e) {
+      // 아직 배차되지 않은 기사 — 오류가 아니라 "버스 없음" 상태다.
+      if (e.kind == ApiErrorKind.notFound) return null;
+      rethrow;
+    }
   }
 
   Future<void> logout() => _storage.clear();

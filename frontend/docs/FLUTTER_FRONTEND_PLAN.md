@@ -405,8 +405,16 @@ DB/Redis/Kafka 포트(5432·6379·29092)만 호스트에 남겼다 — DB 툴 �
 
 ### P2 — 기사 앱  *(C0 완료 후 착수)*
 
-- [ ] ⬜ **C6** 오늘의 노선 화면 + 지도(polyline·정차 마커) — `MapAdapter` 포함(§1.3, §3.8)
-  - 로그인 직후 `GET /api/buses/me`로 busId 캐시(§3.5)
+- [x] ✅ **C6** 오늘의 노선 화면 + 지도(polyline·정차 마커) + `MapViewAdapter` 포트
+  - `core/map/{spec,impl}` — `MapViewAdapter` 포트(중립 `GeoPoint`) + `FlutterMapAdapter`(OSM).
+    **지도 라이브러리를 아는 파일은 impl 하나뿐** → C9·C11도 이 포트만 쓴다
+  - `features/routing/` — `RoutePlanDto`(서버 표현) / `RoutePlan`(도메인, **polyline 파싱**) / repository / controller / 화면
+  - 로그인 직후 `GET /api/buses/me`로 busId를 세션에 캐시(§3.5) — auth 에 둔 이유는 세션 부트스트랩이라서(feature 간 의존 회피)
+  - 빈 상태를 **둘로 나눔**: "배차된 버스 없음"(관리자에게 요청) vs "배포된 노선 없음"(기다리면 됨) — 기사가 할 행동이 다르다
+  - **검증**: `flutter test` **53/53**(polyline 좌표 역순·깨진 JSON·시드 응답 변환·거리/시간/ETA 표기).
+    실 백엔드 E2E — 배차 제안 → 확정(PUBLISHED) → `GET /api/route-plans/driver/1` 로 **정차 3곳·polyline 172점** 수신 확인
+  - ⚠️ **인프라 결함 발견·수정**: compose 가 `backend/.env` 를 로드하지 않아 NCP 네이버 Directions 키가 컨테이너에 없었다.
+    배차 API 가 **401 → "서버 오류"** 로만 보였다. `env_file`(`required: false`) 추가로 해결
 - [ ] ⬜ **C7** 승하차 기록(`POST /api/ride-events`) + 오늘 명단 조회
 - [ ] ⬜ **C8** 버스 위치 주기 보고(`POST /api/locations/bus`) — **Mock / 실GPS 토글**(§8 D2)
   - `LocationSource` 추상 + `MockLocationSource`(노선 polyline 따라 이동) / `GpsLocationSource`(`geolocator`)
