@@ -10,6 +10,8 @@ import '../../app/theme/app_spacing.dart';
 /// [description] 에는 **사용자가 지금 무엇을 하면 되는지**를 적는다.
 /// "데이터가 없습니다" 로 끝내면 기다려야 하는 상황인지 요청해야 하는 상황인지 알 수 없다.
 /// [action] 은 그 행동을 화면 안에서 바로 할 수 있을 때만 준다.
+///
+/// 모양은 `docs/DESIGN_SYSTEM.md` §6 — 원형 아이콘 48 + 제목 + 설명 + 다음 행동.
 class EmptyView extends StatelessWidget {
   const EmptyView({
     super.key,
@@ -35,8 +37,21 @@ class EmptyView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 40, color: theme.colorScheme.outline),
-            const SizedBox(height: AppSpacing.md),
+            Container(
+              width: AppTouch.min,
+              height: AppTouch.min,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHigh,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                size: 24,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.smd),
             Text(
               title,
               textAlign: TextAlign.center,
@@ -47,7 +62,7 @@ class EmptyView extends StatelessWidget {
               description,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.hintColor,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             if (action != null) ...[

@@ -135,7 +135,8 @@
 
 | 토큰 | 값 | 쓰는 곳 | 기존과 차이 |
 |---|---|---|---|
-| `radiusSm` | **8** | 칩·태그 | 6 → 8 |
+| `radiusXs` | 6 | 작은 태그·배지(`다음 정차`·`NEW`) | **신규** |
+| `radiusSm` | **8** | 상태 칩 | 6 → 8 |
 | `radiusMd` | 12 | **버튼·입력·행** | 값 동일, **용도가 바뀐다**(기존 테마는 카드에 썼다) |
 | `radiusLg` | 20 | **카드·시트** | 값 동일, 용도 이동 |
 | (full) | — | 아바타·정차 배지·마커 | `BoxShape.circle` / `StadiumBorder` |
@@ -195,8 +196,11 @@
 
 | 위젯 | 명세 |
 |---|---|
-| `AppStatusChip` | 아이콘 + 라벨. `AppTone { neutral, primary, warning, success, error }` 로 배경/전경을 고른다. 높이 자연 크기, padding `5×10`, radius **8**, 텍스트 `labelMedium`. **읽기 전용 — 탭 동작을 붙이지 않는다** |
-| `AppActionButton` | 최소 높이 **48**(주요는 56), radius **12**, 텍스트 `labelLarge`. 톤: `primary`(승차·하차) / `success`(인계완료) / `errorOutlined`(다시 시도) / `neutralOutlined`(새로고침) |
+| `AppStatusChip` | 아이콘 + 라벨. `AppTone { neutral, primary, warning, success, error }` 로 배경/전경을 고른다. padding `4×12`, radius **8**, 텍스트 `labelMedium`. **읽기 전용 — 탭 동작을 붙이지 않는다** |
+| `AppTag` | 작은 분류 태그(`다음 정차`·`예정`·`NEW`). padding `4×8`, radius **6**, `labelSmall`. `filled: true` 면 `AppTone.solid` 바탕 |
+| `AppTone` | 의미 톤 enum + 색 해석기(`container`/`onContainer`/`solid`/`onSolid`). M3 `ColorScheme` 과 `AppColors` 가 반씩 갖고 있는 걸 여기서 합친다. **위젯은 톤만 고르고 색은 고르지 않는다** |
+| `AppActionButton` | 최소 높이 **48**(`primaryAction: true` 면 56), radius **12**, 텍스트 `labelLarge`. `tone` + `outlined` 조합: `primary`(승차·하차) / `success`(인계완료) / `error`+`outlined`(다시 시도) / `neutral`+`outlined`(새로고침). `busy: true` 면 스피너 + **비활성**(중복 전송이 곧 사고다) |
+| `AppActionDone` | 기록 확정 후 액션 자리에 남는 표시(`✓ 완료`). 비활성 회색 버튼으로 그리지 않는다 — 회색은 "지금은 못 누른다"로 읽히지만 여기 뜻은 "**끝났다**"다 |
 | `SkeletonBox` · `SkeletonList` | 배경 `surfaceContainerHigh`, radius 12, 1.4s 페이드 루프(`.45 → .9 → .45`), 항목마다 **0.15s 지연 스태거** |
 | `OfflineBanner` | `errorContainer` 바탕, **앱바 위 최상단 고정**. 문구 `연결이 끊겼습니다 · 기록은 저장 후 재전송됩니다`. **앱을 못 쓰게 막지 않는다** |
 | `LoadingView` | 전체화면 스피너 대신 **스켈레톤** 우선. 지도는 자리를 유지한 채 로딩 |

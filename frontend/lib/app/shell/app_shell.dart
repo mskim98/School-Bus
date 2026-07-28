@@ -109,22 +109,33 @@ class AppShell extends ConsumerWidget {
 
     if (!needsPhoneFrame) return scaffold;
 
+    final scheme = Theme.of(context).colorScheme;
+
     return ColoredBox(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: scheme.surfaceContainerHighest,
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: AppBreakpoints.compact),
-          // MediaQuery 를 좁혀서 넘겨준다 — 안쪽 화면이 자기 폭을 물어봤을 때
-          // 모니터 폭이 아니라 프레임 폭을 보게 해야 반응형 분기가 실제와 맞는다.
-          child: Builder(
-            builder: (context) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(
-                size: Size(
-                  AppBreakpoints.compact,
-                  MediaQuery.sizeOf(context).height,
-                ),
+          // 테두리를 둘러 "이건 폰 화면"이라고 알린다 — 모니터에서 볼 때
+          // 가운데 정렬만 하면 그냥 좁은 웹페이지로 읽힌다.
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.symmetric(
+                vertical: BorderSide(color: scheme.outlineVariant),
               ),
-              child: scaffold,
+            ),
+            // MediaQuery 를 좁혀서 넘겨준다 — 안쪽 화면이 자기 폭을 물어봤을 때
+            // 모니터 폭이 아니라 프레임 폭을 보게 해야 반응형 분기가 실제와 맞는다.
+            child: Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  size: Size(
+                    AppBreakpoints.compact,
+                    MediaQuery.sizeOf(context).height,
+                  ),
+                ),
+                child: scaffold,
+              ),
             ),
           ),
         ),

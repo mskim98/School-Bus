@@ -26,7 +26,10 @@ class AppSpacing {
 
   static const double xxl = 48;
 
-  /// 칩·태그
+  /// 작은 태그·배지(`다음 정차`·`NEW`)
+  static const double radiusXs = 6;
+
+  /// 상태 칩
   static const double radiusSm = 8;
 
   /// 버튼·입력·행

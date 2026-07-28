@@ -44,7 +44,13 @@
   - `AppTheme`: 컴포넌트 테마 12종. **버튼 4종·입력·아이콘버튼에 48dp 를 전역 보장**해 화면마다 챙기다 빠뜨리는 걸 막았다
   - ⚠️ 반경 용도 이동 — 카드 12→**20**, 버튼·입력 6→**12**. 화면별 잔재는 D5~D8 에서 정리
   - **검증**: `flutter analyze` 무경고 · `dart format` 변경 0 · `flutter test` **203/203**
-- [ ] ⬜ **D4** `core/ui` 공용 컴포넌트 — `AppStatusChip`·`AppActionButton`·`SkeletonBox`·`OfflineBanner` + 기존 4종 외형 교체
+- [x] ✅ **D4** `core/ui` 공용 컴포넌트 + 셸
+  - 신규 5파일: `app_tone.dart`(`AppTone` + 색 해석기) · `app_status_chip.dart`(`AppStatusChip`·`AppTag`) · `app_action_button.dart`(`AppActionButton`·`AppActionDone`) · `skeleton_box.dart`(`SkeletonBox`·`SkeletonList`) · `offline_banner.dart`
+  - ⭐ **`AppTone` 이 핵심이다.** 위젯은 톤(`success`)만 고르고 색(`appColors.successContainer`)은 고르지 않는다. M3 `ColorScheme` 과 `AppColors` 가 반씩 갖고 있는 걸 여기서 합쳐, 같은 의미가 화면마다 다른 색으로 새는 걸 막는다
+  - ⚠️ **확장 색은 필요한 톤에서만 읽는다** — `switch` 밖에서 `context.appColors` 를 미리 꺼냈더니 `AppTone.error` 하나 쓰는 `ErrorView` 까지 `ThemeExtension` 등록에 묶여 기존 위젯 테스트 3건이 죽었다. 지연 조회로 고치고, 테스트 하네스도 `AppTheme.light` 를 얹도록 바꿨다(기본 테마로 띄우면 앱에선 없는 상태를 검증하게 된다)
+  - 기존 4종은 **API 유지, 외형만** 교체(호출부 11곳 무변경). `AsyncSection` 에 `loading` 빌더만 추가 — 목록 화면이 스켈레톤을 넘길 수 있게
+  - `app_shell.dart` — 폰 프레임에 좌우 테두리. 모니터에서 가운데 정렬만 하면 그냥 좁은 웹페이지로 읽힌다
+  - **검증**: `flutter analyze` 무경고 · `dart format` 변경 0 · `flutter test` **215/215**(신규 위젯 테스트 12건)
 - [ ] ⬜ **D5** 기사 — 로그인 · 운행 시작 *(에이전트)*
 - [ ] ⬜ **D6** 기사 — 오늘의 노선(지도) · 위치 보고 *(에이전트)*
 - [ ] ⬜ **D7** 기사 — **승하차 기록 · 운행 종료** ★ *(에이전트)*
@@ -90,12 +96,12 @@
 
 ### 지금 상태
 
-- **D0~D3 완료·커밋됨**
-- 기준선: `flutter analyze` 무경고 · `flutter test` **203/203** · Flutter 3.44.8 / Dart 3.12.2 (`/opt/homebrew/bin/flutter`)
+- **D0~D4 완료·커밋됨**
+- 기준선: `flutter analyze` 무경고 · `flutter test` **215/215** · Flutter 3.44.8 / Dart 3.12.2 (`/opt/homebrew/bin/flutter`)
 
 ### 다음에 할 일
 
-**D4** 부터 순서대로. D3·D4 가 끝나기 전에는 D5~D8 에이전트를 띄우지 않는다(공용 토큰이 없으면 화면이 매직넘버로 채워진다).
+**D5~D8** — 공용 토큰·컴포넌트가 갖춰졌으므로 `ui-implementer` 4개를 병렬로 띄운다.
 
 ---
 

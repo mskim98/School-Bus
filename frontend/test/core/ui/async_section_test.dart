@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:school_bus/app/theme/app_theme.dart';
 import 'package:school_bus/core/api/api_exception.dart';
 import 'package:school_bus/core/ui/async_section.dart';
 import 'package:school_bus/core/ui/empty_view.dart';
 import 'package:school_bus/core/ui/loading_view.dart';
 
-Future<void> _pump(WidgetTester tester, Widget child) =>
-    tester.pumpWidget(MaterialApp(home: Scaffold(body: child)));
+/// **실제 테마를 얹어** 띄운다.
+///
+/// 기본 `MaterialApp` 으로 띄우면 `AppColors`(ThemeExtension)가 없는 화면을
+/// 검증하게 된다 — 앱에서는 절대 일어나지 않는 상태다. 공용 위젯이
+/// 확장 색을 쓰기 시작하면 그때 테스트만 통과하고 앱이 깨진다.
+Future<void> _pump(WidgetTester tester, Widget child) => tester.pumpWidget(
+  MaterialApp(
+    theme: AppTheme.light,
+    home: Scaffold(body: child),
+  ),
+);
 
 void main() {
   group('AsyncSection — 세 갈래를 빠짐없이 그린다', () {
