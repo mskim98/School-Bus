@@ -443,26 +443,62 @@ DB/Redis/Kafka 포트(5432·6379·29092)만 호스트에 남겼다 — DB 툴 �
 
 > ⚠️ **작업 규칙 (사용자 요청, 2026-07-28): 토큰 소진으로 세션이 중간에 끊길 것을 전제로 진행한다.**
 > **한 항목(C*)을 끝낼 때마다 §6 체크박스와 이 절을 갱신하고 커밋한다.** 다음 세션은 이 문서만 읽고 이어간다.
-> 항목을 마치지 않은 채 다음으로 넘어가지 않는다.
 
-- **마지막 완료 항목**: **C5** — 라우팅·역할가드·반응형 셸 완료. **코어(C0~C5) 전부 끝. `flutter test` 43/43**
-- **다음 할 일**: **C6** — 기사 오늘의 노선. 로그인 직후 `GET /api/buses/me`로 busId 캐시(§3.5) →
-  `GET /api/route-plans/driver/{busId}` → `MapViewAdapter` 포트 + `FlutterMapAdapter`로 polyline·정차 마커(§3.8 좌표 역순 주의)
-- **그 다음**: C7·C8(기사) → C9~C11(관리자) → C12·C13(실시간) → C14(마감)
-- **에이전트 투입 방식**(사용자 요청): C6~C11은 feature 단위로 병렬 가능.
-  각 에이전트에 ① 담당 자리표시자 화면 경로 ② `FLUTTER_CODE_CONVENTIONS.md` 준수 ③ 이 문서 §3 함정 목록을 전달하고,
-  완료 후 `convention-auditor`로 컨벤션 §9 체크리스트 검사를 돌린다.
-  ⚠️ `core/map`(`MapViewAdapter`)은 C6·C9·C11이 함께 쓰므로 **C6에서 먼저 만든 뒤** 나머지를 병렬로 돌린다
-- **브라우저 확인**: `http://localhost/` → 로그인 → 역할별 화면(기사 2탭 / 관리자 4탭)
-  - `driver@school.com` · `admin@school.com` · `platform@school.com` / 비밀번호 전부 `password`
-  - `student@school.com`으로 로그인하면 "준비 중" 안내(MVP 범위 밖)
-- **인프라 상태**: postgres(healthy)·redis·kafka·backend 4개 기동 중.
-  꺼졌다면 §9의 PATH를 잡고 `docker compose up -d --build`(볼륨이 없어 `down` 후 `up`이면 시드 상태로 리셋된다)
-- **에이전트 활용**: 화면 작업(C6~C11)은 feature 단위로 병렬화 가능 — 에이전트에 `FLUTTER_CODE_CONVENTIONS.md` 준수를 명시하고,
-  완료 후 `convention-auditor`로 §9 체크리스트 검사를 돌린다(사용자 요청, 2026-07-28)
-- **환경 메모**: Docker(postgres/redis/kafka/backend)는 **사용자가 직접 켠다** — 필요할 때 요청할 것
+### 지금 상태 (2026-07-28)
 
----
+- **완료·커밋됨**: C0 · C1 · C2 · C3 · C4 · C5 · C6 + nginx 리버스 프록시 + 빠른 로그인 + 디자인 지시서
+  - 마지막 커밋: `7126e56` (C6 기사 오늘의 노선 + 지도 포트)
+  - 그 시점 기준 `flutter test` **53/53**, `flutter analyze` 무경고
+
+### 🚧 진행 중 — 에이전트 4개가 만든 **미커밋** 변경분 (약 59개 파일)
+
+**중요: 아래 작업은 워킹 트리에만 있고 커밋되지 않았다.** 새 세션은 먼저 `git status` 로 확인할 것.
+
+⚠️ **에이전트 3개가 토큰 한도로 중도 실패했다**(2026-07-28 12:53). 그 작업분은 **완료 보고 없이 끊긴 상태**라
+컴파일조차 안 될 수 있다. 아래 표의 상태를 먼저 확인할 것.
+
+| 에이전트 | 담당 | 소유 디렉토리 | 상태 |
+|---|---|---|---|
+| C7-rideevent | 운행세션 + 승하차 기록 | `features/{drivesession,rideevent}` | ✅ **정상 완료** |
+| C8-C9-location | 기사 위치 보고 + 관제 지도 | `core/location`, `features/location` | ⚠️ **토큰 한도로 중단** |
+| C10-C11-routing-admin | 관리자 배차 + 노선 목록/상세 | `features/routing`(관리자 쪽) | ⚠️ **토큰 한도로 중단** |
+| C12-C13-notification | STOMP + 알림함 | `core/ws`, `features/notification` | ⚠️ **토큰 한도로 중단** |
+
+중단된 3개는 **파일은 대부분 만들어 놨다**(`git status` 로 확인). 미완성 지점만 이어서 채우면 되며,
+지우고 처음부터 다시 만들지 말 것.
+
+**새 세션이 할 일 (순서대로):**
+
+```bash
+cd frontend
+dart format lib/ test/
+flutter analyze          # 무경고여야 한다
+flutter test             # 전부 통과해야 한다
+```
+
+1. 위 3개가 통과하면 → C7~C13 을 **항목별로 나눠 커밋**하고 §6 체크박스 갱신
+2. 실패하면 → 실패 지점만 고친다. 에이전트 작업을 통째로 되돌리지 말 것(수십 개 파일이다)
+3. 그다음 **`convention-auditor` 에이전트로 `FLUTTER_CODE_CONVENTIONS.md` §9 체크리스트 검사**(사용자 요청사항)
+4. 마지막으로 컨테이너 재빌드 후 브라우저 확인:
+   `docker compose up -d --build frontend` → `http://localhost/`
+
+**아직 검증 안 된 것 (에이전트 보고를 못 받은 상태에서 끊겼다면 반드시 확인)**
+- 프록시 경유 **STOMP CONNECT** 가 실제로 되는지 (curl 로 101 업그레이드까지만 확인됨)
+- 4개 에이전트의 변경분이 서로 충돌 없이 합쳐지는지
+- 기사 화면에 학생 **이름**이 실제로 뜨는지(운행 세션 경유, §3.11)
+
+### 남은 작업
+
+- **C14** — 로딩/빈상태/에러 UI 통일 + 전체 시나리오 통합 점검
+- (C7~C13 이 위에서 마무리되면 MVP 프론트는 완료)
+
+### 환경
+
+- 인프라: `docker compose up -d --build` → **`http://localhost/` (:80) 단일 진입점**. 컨테이너 6개(proxy·frontend·backend·postgres·redis·kafka)
+- Docker CLI 는 PATH 에 없다: `export PATH="/Applications/Code/Docker.app/Contents/Resources/bin:$PATH"` (§9)
+- 계정: `driver@school.com`(busId=1) · `admin@school.com`(tenantId=1) · `platform@school.com` / 비밀번호 전부 `password`
+- 로그인 화면에 **빠른 로그인 버튼**이 있다(개발 빌드 한정)
+- ⚠️ DB 는 볼륨이 없어 `docker compose down` 후 `up` 이면 **시드 상태로 리셋**된다(배포한 노선 계획도 사라짐 → auto-assign 부터 다시)
 
 ## 8. 설계 결정 기록 (확정됨)
 
