@@ -103,11 +103,17 @@ class NotificationTile extends StatelessWidget {
 /// DTO 를 enum 으로 좁히지 않고 여기서 푸는 이유(컨벤션 §4) — 이건 **표시**의 문제다.
 /// 서버에 종류가 추가돼도 목록 파싱이 깨지지 않고, 모르는 값은 [_unknown] 으로 떨어진다.
 ///
-/// 톤 배정은 디자인 시스템 §5.2 가 정한 것이다 —
-/// 미승차 `error` · 근접 `primary` · 승하차 `success` · 노선 배포 `neutral`.
+/// 톤 배정 —
+/// 승하차 3종은 **상태 계약 §4 를 그대로 따른다**(승차 `primary` · 하차 `warning` ·
+/// 인계 `success`). 나머지는 §5.2 (미승차 `error` · 근접 `primary` · 노선 배포 `neutral`).
+///
+/// ⚠️ 하차와 인계를 같은 초록으로 묶지 않는 게 핵심이다. 하차는 하원에서
+/// **아직 인계가 남은 중간 단계**다. 색이 같으면 관리자가 알림 목록만 훑고
+/// "아직 인계 안 된 아이"를 완료로 읽는다 — 기사 화면(`ride_status_chip.dart`)이
+/// 막으려던 사고가 관리자 화면에서 그대로 일어난다.
 enum _NotificationKind {
-  boardDone('BOARD_DONE', '승차', Icons.login, AppTone.success),
-  alightDone('ALIGHT_DONE', '하차', Icons.logout, AppTone.success),
+  boardDone('BOARD_DONE', '승차', Icons.login, AppTone.primary),
+  alightDone('ALIGHT_DONE', '하차', Icons.logout, AppTone.warning),
   handoverDone(
     'HANDOVER_DONE',
     '인계',

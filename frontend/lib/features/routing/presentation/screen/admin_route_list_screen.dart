@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/ui/app_action_button.dart';
+import '../../../../core/ui/app_tone.dart';
 import '../../../../core/ui/async_section.dart';
 import '../../../../core/ui/empty_view.dart';
 import '../../../../core/ui/skeleton_box.dart';
@@ -114,10 +116,19 @@ class _PlanListPane extends ConsumerWidget {
             loading: () =>
                 const SkeletonList(itemCount: 4, itemHeight: _cardHeight),
             data: (state) => state.isEmpty
-                ? const EmptyView(
+                ? EmptyView(
                     icon: Icons.route_outlined,
                     title: '아직 만들어진 노선이 없습니다',
                     description: '배차 화면에서 제안을 받고 확정하면 이곳에 노선이 쌓입니다.',
+                    // 설명이 이미 배차 화면을 지목하고 있고 그 이동이 앱 안에서
+                    // 가능하다. 반대 방향(배차 → 노선)에는 버튼이 있는데 이쪽만
+                    // 없어 왕복 동선이 한쪽만 뚫려 있었다.
+                    action: AppActionButton(
+                      label: '배차 화면으로',
+                      tone: AppTone.primary,
+                      outlined: true,
+                      onPressed: () => context.go(AppRoutes.adminDispatch),
+                    ),
                   )
                 : _PlanList(state: state, selectedId: selectedId),
           ),

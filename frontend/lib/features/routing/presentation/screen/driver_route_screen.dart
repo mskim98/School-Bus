@@ -189,7 +189,9 @@ class _NextStopCard extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.smd),
       decoration: BoxDecoration(
         color: scheme.surface,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        // 지도 위에 떠 있는 카드라 20 이다(§3.2). 정차 목록의 행(12)과
+        // 같은 모서리면 카드와 항목이 같은 위계로 읽힌다.
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
@@ -340,20 +342,40 @@ class _RouteSummary extends StatelessWidget {
 
   final RoutePlan plan;
 
+  /// 이 배율을 넘으면 4열이 한 줄에 안 들어간다.
+  ///
+  /// 폰 폭 412 기준 칸당 약 65dp 인데, `12.4km`·`약 1시간 5분` 처럼 줄바꿈
+  /// 지점이 없는 값이 200% 로 커지면 가로로 넘쳐 **잘린다**. 2×2 로 접는다.
+  /// 같은 화면의 `RosterStudentTile` 이 쓰는 것과 같은 방식이다(§7-5).
+  static const double _foldAboveTextScale = 1.15;
+
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final metrics = [
+      _Metric(label: '방향', value: plan.direction.label),
+      _Metric(label: '정차', value: '${plan.stops.length}곳'),
+      _Metric(label: '거리', value: plan.distanceLabel),
+      _Metric(label: '소요', value: plan.durationLabel),
+    ];
+
+    if (MediaQuery.textScalerOf(context).scale(1) <= _foldAboveTextScale) {
+      return Row(children: _spaced(metrics));
+    }
+    return Column(
       children: [
-        _Metric(label: '방향', value: plan.direction.label),
-        const SizedBox(width: AppSpacing.sm),
-        _Metric(label: '정차', value: '${plan.stops.length}곳'),
-        const SizedBox(width: AppSpacing.sm),
-        _Metric(label: '거리', value: plan.distanceLabel),
-        const SizedBox(width: AppSpacing.sm),
-        _Metric(label: '소요', value: plan.durationLabel),
+        Row(children: _spaced(metrics.sublist(0, 2))),
+        const SizedBox(height: AppSpacing.sm),
+        Row(children: _spaced(metrics.sublist(2))),
       ],
     );
   }
+
+  static List<Widget> _spaced(List<Widget> items) => [
+    for (final (index, item) in items.indexed) ...[
+      if (index > 0) const SizedBox(width: AppSpacing.sm),
+      item,
+    ],
+  ];
 }
 
 class _Metric extends StatelessWidget {

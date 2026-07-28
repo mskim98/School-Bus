@@ -141,6 +141,16 @@
 | `radiusLg` | 20 | **카드·시트** | 값 동일, 용도 이동 |
 | (full) | — | 아바타·정차 배지·마커 | `BoxShape.circle` / `StadiumBorder` |
 
+**카드 vs 행 vs 배너** — 반경은 모양이 아니라 **용도**로 배정한다. 헷갈리면 이 순서로 판단한다:
+
+| 무엇인가 | 반경 |
+|---|---|
+| 화면/지도 위에 **단독으로 놓이는 전폭 컨테이너**(요약·정보 카드), 바텀시트 | `radiusLg` 20 |
+| **목록의 한 줄**(학생 행·정차 카드), 버튼, 입력 | `radiusMd` 12 |
+| 인라인 **안내·경고 배너**(`ErrorBanner`·안내 박스) | `radiusMd` 12 — 배너는 카드가 아니라 문장 덩어리다 |
+
+카드(20)와 행(12)이 같은 모서리를 가지면 위계 신호가 죽는다. 그게 이 규칙이 막으려는 것이다.
+
 ### 3.3 터치 타깃
 
 | 값 | 용도 |
@@ -150,6 +160,15 @@
 | 40dp | **금지** |
 
 인접 버튼 사이 최소 간격 `AppSpacing.sm`(8). 기사 앱 주요 동작 버튼은 **화면 하단 절반**에 둔다.
+
+**칩은 둘로 나뉜다** — 이 구분이 없으면 판단이 갈린다:
+
+| 종류 | 48dp 대상? |
+|---|---|
+| **읽기 전용 칩**(`AppStatusChip`·`AppTag`) | ❌ 대상 아님. 탭 동작이 없다 |
+| **선택 칩**(`ChoiceChip`·`FilterChip`·`SegmentedButton`) | ✅ **대상**. `app_theme.dart` 가 전역 보장한다 |
+
+M3 기본값은 `SegmentedButton` 40dp · `ChoiceChip`류 32dp 로 **둘 다 §3.3 미달**이다. 화면에서 `style` 로 매번 올리지 말고 테마에서 한 번에 잡는다 — 화면마다 챙기면 반드시 빠뜨린다.
 
 ### 3.4 고도(elevation)
 
@@ -216,7 +235,9 @@
 | `RouteStopTile` (정차 카드) | `features/routing/presentation/widget/` | radius 12, padding 14, gap 14. 좌측 순번 배지 32 원형.<br>**다음 정차**: 카드 `primaryContainer`, 배지 `primary`, 태그 `primary`.<br>**예정**: 카드 `surfaceContainer`, 배지·태그 `surfaceContainerHigh`.<br>**완료**: 위와 같고 `opacity .6`.<br>우측에 ETA(`titleSmall`) + 진행률(`3/5명`, `bodySmall`) |
 | `NotificationTile` (알림 행) | `features/notification/presentation/widget/` | 좌측 40 원형 아이콘(유형별 톤) · 유형 라벨(`bodySmall`) · `NEW` 배지(`primary` 바탕, `labelSmall`) · 문구(`bodyLarge`) · 우측 시각(mono).<br>**새 알림 행은 배경 `surfaceContainer`**, 읽은 것은 투명 |
 
-**알림 유형별 톤**: 미승차 `error` · 근접 `primary` · 승하차 `success` · 노선 배포 `neutral`.
+**알림 유형별 톤**: 미승차 `error` · 근접 `primary` · 노선 배포 `neutral` · **승하차 알림은 §4 상태 톤을 그대로 따른다**(승차 `primary` · 하차 `warning` · 인계 `success`).
+
+> ⚠️ 이 마지막 항목은 원래 "승하차 `success`" 한 덩어리였는데, 그러면 관리자 알림함에서 **하차와 인계가 같은 초록**이 된다. 하차는 하원에서 아직 인계가 남은 중간 단계라 §4 가 일부러 나눠 놓은 것이고, 색을 합치면 관리자가 알림 목록만 보고 "아직 인계 안 된 아이"를 완료로 읽는다. **§4 와 충돌하면 언제나 §4 가 이긴다.**
 
 ### 5.3 지도 (`MapViewAdapter` 포트 뒤)
 
@@ -256,7 +277,15 @@
 5. `MediaQuery.textScalerOf` **200% 에서 학생 행이 깨지지 않아야** 한다 — `Row` 고정폭 대신 `Wrap`/`Flexible`
 6. 간격·반경 숫자 리터럴 금지 — `AppSpacing` 경유
 7. 라벨 문자열(§4)은 한 곳(`RideStatusChip` 의 매핑)에서만 정의
-8. ETA 는 `etaSeconds` 를 **사람이 읽는 표기로 변환**한다 — 30초 이하 `지금`, 그 외 `약 N분 후`. **초를 그대로 노출하지 않는다**
+8. ETA 는 `etaSeconds` 를 **사람이 읽는 표기로 변환**한다. **초를 그대로 노출하지 않는다.** 변환은 도메인 한 곳(`RoutePlan`)에 두고 화면마다 다시 만들지 않는다
+
+   | `etaSeconds` | 표기 |
+   |---|---|
+   | `<= 0` | **`출발`** — 노선의 시작점이라 "0분 후"가 아니다 |
+   | 1 ~ 29 | `곧 도착` |
+   | 그 외 | `N분 후` (반올림) |
+
+   > 시안은 `지금` / `약 N분 후` 였다. `0초`가 실제로 **출발지**를 뜻한다는 걸 시안이 몰랐던 것이라(시드 `stops[0].etaSeconds == 0`), 케이스를 하나 더 다루는 구현 쪽을 규정으로 삼았다.
 
 ---
 

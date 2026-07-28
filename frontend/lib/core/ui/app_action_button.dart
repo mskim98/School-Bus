@@ -104,8 +104,9 @@ class AppActionDone extends StatelessWidget {
       ),
       child: Text(
         '$icon $label',
+        // 액션 버튼과 같은 자리에 교대로 놓이므로 같은 슬롯(labelLarge)을 쓴다.
+        // 크기가 1px 만 달라도 기록이 확정되는 순간 그 자리가 미세하게 흔들린다.
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-          fontSize: 14,
           color: AppTone.success.onContainer(context),
         ),
       ),

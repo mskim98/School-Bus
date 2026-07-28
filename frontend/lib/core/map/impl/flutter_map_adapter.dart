@@ -78,7 +78,9 @@ class _FlutterMapView extends StatelessWidget {
                 if (r.points.length >= 2)
                   Polyline(
                     points: r.points.map(FlutterMapAdapter._toLatLng).toList(),
-                    strokeWidth: 5,
+                    // §5.3 이 지정한 굵기. 타일 위에서 5 는 도로선과 섞여
+                    // 어느 쪽이 우리 경로인지 잠깐 봐서는 안 읽힌다.
+                    strokeWidth: 9,
                     color: Theme.of(context).colorScheme.primary,
                   ),
             ],
@@ -107,7 +109,8 @@ class _MarkerPin extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     // 색만으로 구분하지 않는다 — 직사광선 아래서도 읽히도록 아이콘·숫자를 함께 쓴다.
     final (
@@ -115,29 +118,33 @@ class _MarkerPin extends StatelessWidget {
       Color foreground,
       Widget content,
     ) = switch (spec.kind) {
+      // §5.3 이 정한 역할색만 쓴다. `secondary`·`tertiary` 는 시드에서 자동
+      // 파생될 뿐 디자인 시스템 §1 이 정의한 역할이 아니라, 그 색이 무슨 뜻인지
+      // 아무도 모른다 — 지도는 화면에서 가장 오래 보는 곳이라 특히 그렇다.
       MapMarkerKind.bus => (
-        scheme.primary,
-        scheme.onPrimary,
-        Icon(Icons.directions_bus, size: 20, color: scheme.onPrimary),
+        scheme.onSurface,
+        scheme.surface,
+        Icon(Icons.directions_bus, size: 20, color: scheme.surface),
       ),
       MapMarkerKind.depot => (
-        scheme.tertiary,
-        scheme.onTertiary,
-        Icon(Icons.school, size: 18, color: scheme.onTertiary),
+        scheme.onSurface,
+        scheme.surface,
+        Icon(Icons.school, size: 18, color: scheme.surface),
       ),
+      // 아직 가지 않은 정차 — 채운 원으로 눈에 띄게(§5.3 "다음 정차").
       MapMarkerKind.stop => (
-        scheme.secondary,
-        scheme.onSecondary,
+        scheme.primary,
+        scheme.onPrimary,
         Text(
           spec.label ?? '',
-          style: TextStyle(
-            color: scheme.onSecondary,
-            fontWeight: FontWeight.bold,
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: scheme.onPrimary,
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
       ),
       MapMarkerKind.visitedStop => (
-        scheme.surfaceContainerHighest,
+        scheme.surfaceContainerHigh,
         scheme.outline,
         Icon(Icons.check, size: 18, color: scheme.outline),
       ),
@@ -154,7 +161,7 @@ class _MarkerPin extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: DefaultTextStyle.merge(
-        style: TextStyle(color: foreground),
+        style: theme.textTheme.labelLarge?.copyWith(color: foreground),
         child: content,
       ),
     );

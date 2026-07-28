@@ -121,6 +121,28 @@ class AppTheme {
           minimumSize: const Size(AppTouch.min, AppTouch.min),
         ),
       ),
+      // M3 기본값이 §3.3 미달이라 여기서 올린다 — SegmentedButton 40, Chip 32.
+      // 히트 영역은 `materialTapTargetSize: padded` 덕에 48 이 나오지만 **보이는
+      // 높이**가 작으면 흔들리는 차 안에서 조준할 표적이 그만큼 작다.
+      // 화면마다 style 로 챙기면 반드시 빠뜨리므로 테마에서 한 번에 잡는다.
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          minimumSize: const Size.fromHeight(AppTouch.min),
+          textStyle: textTheme.labelLarge,
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        // 선택 칩만 해당한다. 읽기 전용 표기는 AppStatusChip/AppTag 이고
+        // 그건 M3 Chip 을 쓰지 않으므로 이 테마에 걸리지 않는다.
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.smd,
+          vertical: AppSpacing.smd,
+        ),
+        labelStyle: textTheme.labelLarge,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        ),
+      ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: scheme.surfaceContainer,
         surfaceTintColor: Colors.transparent,

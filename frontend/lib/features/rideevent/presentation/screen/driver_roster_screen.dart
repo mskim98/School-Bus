@@ -190,7 +190,9 @@ class _ProgressHeader extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        // 목록 위에 단독으로 놓이는 카드라 20 이다(§3.2). 학생 행(12)과 같은
+        // 모서리를 쓰면 요약과 항목이 같은 위계로 읽힌다.
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Row(
@@ -226,7 +228,9 @@ class _ProgressHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(AppSpacing.xs),
+                  // 반경 스케일의 값을 쓴다 — 간격 토큰(xs=4)을 빌려 쓰면
+                  // 나중에 반경을 조정할 때 이 자리만 따라오지 않는다(§3.2).
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusXs),
                   child: LinearProgressIndicator(
                     value: total == 0 ? 0 : done / total,
                     minHeight: AppSpacing.sm,
