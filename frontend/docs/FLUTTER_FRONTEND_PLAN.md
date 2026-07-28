@@ -342,10 +342,14 @@ server {
   - **검증**: `BusQueryServiceTest` 3케이스 추가(정상·담당버스없음 404·복수버스 시 첫 건) → `./gradlew test --tests '*BusQueryServiceTest*'` 통과.
     전체 `./gradlew test` 100개 중 99개 통과, `BackendApplicationTests.contextLoads()` 1개는 **Docker 미기동(Postgres 연결 실패)** 으로 실패 — 환경 문제
   - ⏳ **미검증**: Docker 기동 후 `driver@school.com`으로 실제 호출(3호차 반환) — 다음 세션에서 확인할 것
-- [ ] ⬜ **C1** Flutter 프로젝트 생성(`flutter create`) + `pubspec.yaml` 의존성 + §2 폴더 골격
+- [ ] ⛔ **C1** Flutter 프로젝트 생성(`flutter create`) + `pubspec.yaml` 의존성 + §2 폴더 골격
+  - **블록: 로컬에 Flutter SDK 미설치** (§9 환경 참조). 설치 전엔 `flutter create`·`pub get`·`analyze` 어느 것도 실행 불가
   - 검증: `flutter analyze` 무경고, `flutter run -d chrome` 기본 화면 표시
-- [ ] ⬜ **C2** `Dockerfile` + `nginx.conf` + `docker-compose.yml` frontend 서비스 갱신(§5)
-  - 검증: `docker compose up -d --build` → `http://localhost:3000` 접속
+- [ ] 🟡 **C2** `Dockerfile` + `nginx.conf` + `docker-compose.yml` frontend 서비스 갱신(§5)
+  - ✅ 작성 완료: `frontend/Dockerfile`(멀티스테이지, `API_BASE_URL` build-arg) · `frontend/nginx.conf`(SPA fallback + 캐시 정책) · `frontend/.dockerignore`
+  - ⏳ 남음: `docker-compose.yml`의 frontend 서비스 갱신 — **C1 완료 후에 한다.**
+    지금 `profiles: ["frontend"]`를 떼면 pubspec.yaml이 없어 빌드가 실패하고, 잘 되던 `docker compose up -d --build`(백엔드)까지 같이 깨진다
+  - **미검증**: Docker Desktop 미설치라 빌드를 한 번도 돌려보지 못했다 — C1 후 반드시 실제 빌드로 확인할 것
 
 ### P1 — 코어 인프라
 
@@ -389,10 +393,13 @@ server {
 > **한 항목(C*)을 끝낼 때마다 §6 체크박스와 이 절을 갱신하고 커밋한다.** 다음 세션은 이 문서만 읽고 이어간다.
 > 항목을 마치지 않은 채 다음으로 넘어가지 않는다.
 
-- **마지막 완료 항목**: **C0** — 백엔드 `GET /api/buses/me` 신설 (단위테스트 통과, 실기동 검증만 대기)
-- **현재 진행 중**: 없음
-- **다음 할 일**: **C1**(Flutter 프로젝트 생성 + 의존성 + 폴더 골격)
-- **대기 중인 검증**: Docker 기동 후 `GET /api/buses/me` 실호출 확인(C0)
+- **마지막 완료 항목**: **C0** — 백엔드 `GET /api/buses/me` 신설 (커밋 `6df3b28`, 단위테스트 통과)
+- **현재 진행 중**: **C2 일부** — Docker 산출물 3개 작성 완료, compose 갱신은 C1 이후로 보류
+- **다음 할 일**: **⛔ C1 — Flutter SDK 설치 대기 중** (§9). 설치되면 `flutter create` → 의존성 → 폴더 골격
+- **대기 중인 검증** (환경 복구 후 한 번에 처리):
+  1. `GET /api/buses/me` 실호출 — `driver@school.com` 로그인 후 3호차(busId=1) 반환 확인 (C0)
+  2. `./gradlew test` 100/100 — 현재 `contextLoads()` 1건이 Postgres 미기동으로 실패 중
+  3. `docker compose up -d --build` → `localhost:3000` 접속 (C2)
 - **환경 메모**: Docker(postgres/redis/kafka/backend)는 **사용자가 직접 켠다** — 필요할 때 요청할 것
 
 ---
@@ -429,6 +436,26 @@ MVP에서는 시드 기준 `tenantId=1`로 고정하고 화면 상단에 "고정
 ---
 
 ## 9. 리스크 / 전제
+
+### ⛔ 현재 환경 상태 (2026-07-28 확인) — C1 블로커
+
+로컬 개발 머신에 **둘 다 없다.** 사용자가 설치해야 진행 가능하다.
+
+| 도구 | 상태 | 확인 방법 |
+|---|---|---|
+| **Flutter SDK** | ❌ 미설치 | `which flutter` → not found |
+| **Docker Desktop** | ❌ 미설치 | `/usr/local/bin/docker`가 `/Applications/Docker.app`을 가리키는 **끊어진 심볼릭 링크**로 남아 있다(과거 설치 흔적) |
+
+```bash
+brew install --cask flutter        # Flutter SDK
+brew install --cask docker         # Docker Desktop (설치 후 앱을 한 번 실행해야 데몬이 뜬다)
+flutter doctor                     # 설치 확인 — Chrome 항목이 ✓ 여야 Web 빌드 가능
+```
+
+> Docker가 없으면 백엔드·DB도 못 띄운다 → `BackendApplicationTests.contextLoads()`가 계속 실패하고
+> API 실호출 검증도 전부 막힌다. **Flutter보다 Docker가 먼저다.**
+
+### 기타
 
 - **Docker 인프라는 사용자가 직접 켠다** — 백엔드·DB가 안 떠 있어 생긴 실패는 코드 결함이 아니라 **환경 문제**로 분류해 보고한다(루트 `CLAUDE.md` 작업 규칙)
 - **로컬 postgres에 영속 볼륨이 없다** — `docker compose down` 후 `up`이면 데이터가 시드로 리셋된다. 프론트 테스트로 꼬인 데이터는 이 방법으로 되돌린다
