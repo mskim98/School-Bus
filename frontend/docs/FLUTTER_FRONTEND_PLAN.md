@@ -43,10 +43,11 @@
 |---|---|---|
 | 프레임워크 | **Flutter (stable) / Dart 3** | 사용자 지정 |
 | 빌드 타깃 | **Web(주) + Android/iOS(부)** | §1.2 참조 — Docker로 띄우는 건 Web |
-| 상태관리 | **Riverpod** (`flutter_riverpod` + `riverpod_annotation`) | 보일러플레이트가 Bloc보다 적고, 비동기 상태(`AsyncValue`: loading/data/error)가 내장돼 API 화면에 그대로 맞는다 |
+| 상태관리 | **Riverpod** (`flutter_riverpod` **only**) | 보일러플레이트가 Bloc보다 적고, `AsyncValue`(loading/error/data)가 내장돼 API 화면에 그대로 맞는다.<br>⚠️ `riverpod_annotation`/`riverpod_generator`는 **제외** — Flutter 3.44.8 번들 analyzer와 버전 충돌(C1). Provider는 손으로 선언 |
 | 라우팅 | **`go_router`** | 선언형 + `redirect` 훅으로 "역할별 진입 화면 분기 / 미로그인 차단"을 한 곳에서 처리 |
 | HTTP | **`dio`** | interceptor 체인이 있어 JWT 부착·401 자동 refresh를 한 군데로 모을 수 있다 |
-| 모델/직렬화 | **`freezed` + `json_serializable`** | `ApiResponse<T>` 제네릭 언랩을 타입 안전하게 처리 |
+| 모델/직렬화 | **불변 클래스 + `fromJson`** | 현재 DTO가 단순해 코드생성 없이 충분하다. `freezed`/`json_serializable`은 의존성에만 두고, 중첩이 깊은 DTO(`RoutePlan.stops[]`)에서 값을 할 때 도입한다 |
+| 리버스 프록시 | **nginx** (`:80` 단일 진입점) | §5 — CORS 제거 + 로드밸런싱 확장 지점 |
 | 토큰 저장 | **`flutter_secure_storage`** | 모바일은 Keychain/Keystore, 웹은 WebCrypto 기반 저장으로 자동 분기 |
 | WebSocket | **`stomp_dart_client`** | 백엔드가 **SockJS 미사용 순수 STOMP**라서 그대로 맞는다 (`MVP_API_SPEC.md` §7.1) |
 | 지도 | **`flutter_map`** (OSM 타일) | §1.3 참조 |
@@ -264,48 +265,61 @@ WebSocket 구독 목록에 **버스 위치가 없다.** `/user/queue/location`·
 
 ---
 
-## 5. Docker 구성
+## 5. Docker 구성 — nginx 리버스 프록시 단일 진입점
 
-### 5.1 Dockerfile (멀티스테이지)
+> **모든 HTTP 접근은 `:80`의 nginx 프록시 한 곳을 지난다.** backend·frontend는 호스트에 포트를 열지 않는다.
+> (사용자 확정 2026-07-28. 기획서 목표 스택의 "Nginx 리버스 프록시" 항목에 해당)
 
-```dockerfile
-FROM ghcr.io/cirruslabs/flutter:stable AS build
-WORKDIR /app
-COPY pubspec.* ./
-RUN flutter pub get
-COPY . .
-RUN flutter build web --release --dart-define=API_BASE_URL=http://localhost:8080
-
-FROM nginx:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/build/web /usr/share/nginx/html
-EXPOSE 80
+```
+브라우저
+   │
+   ▼  :80
+┌──────────────────── proxy (nginx:alpine) ────────────────────┐
+│  /                → frontend_pool  (Flutter Web 정적)         │
+│  /api/            → backend_pool                              │
+│  /ws/             → backend_pool   (Upgrade 헤더 처리)        │
+│  /swagger-ui·/v3/api-docs → backend_pool                      │
+└───────────────────────────────────────────────────────────────┘
+     │                                  │
+     ▼ frontend:80                      ▼ backend:8080
+  nginx(정적 서빙 + SPA fallback)     Spring Boot
 ```
 
-### 5.2 nginx.conf — SPA fallback 필수
+설정 파일: **`infra/proxy/nginx.conf`** (볼륨 마운트 — 고친 뒤 `docker compose restart proxy` 면 반영, 재빌드 불필요)
 
-```nginx
-server {
-  listen 80;
-  root /usr/share/nginx/html;
-  location / {
-    try_files $uri $uri/ /index.html;   # go_router 딥링크(/admin/routes 등) 새로고침 시 404 방지
-  }
-}
-```
+| 주소 | 용도 |
+|---|---|
+| `http://localhost/` | 화면 |
+| `http://localhost/api/...` | API |
+| `ws://localhost/ws/location` | STOMP WebSocket |
+| `http://localhost/swagger-ui/index.html` | Swagger UI |
 
-### 5.3 docker-compose.yml 수정 사항
+DB/Redis/Kafka 포트(5432·6379·29092)만 호스트에 남겼다 — DB 툴 접속과, 인프라만 컨테이너로 띄우고 백엔드는 IDE에서 `bootRun` 하는 개발 방식을 위해서다.
 
-기존 `frontend` 서비스는 Next.js(포트 3000 직접 노출) 전제라 아래처럼 바꾼다:
+### 5.1 프록시가 생기면서 달라진 것 ★
 
-- `profiles: ["frontend"]` **제거** → 기본 `docker compose up`에 포함
-- 포트 매핑 `"3000:80"` (nginx는 컨테이너 내부 80, 호스트는 CORS 허용 목록에 있는 3000)
-- `depends_on: [backend]` 유지
+**CORS가 사라졌다.** 프론트와 API가 같은 출처(`:80`)가 되므로 브라우저가 preflight를 보내지 않는다.
+→ `API_BASE_URL`을 **빈 문자열**로 빌드하고 dio가 상대 경로(`/api/...`)로 요청한다.
+같은 번들이 `localhost`에서도 배포 도메인에서도 그대로 동작하고, 출처 목록 관리도 필요 없어진다.
 
-> **주의**: 반복 개발 중에는 Docker 재빌드가 느리다. UI 작업은 `flutter run -d chrome --web-port=3000`으로 로컬 실행하고,
-> Docker는 "통합 확인 / 시연" 시점에만 쓰는 게 효율적이다. 어느 쪽이든 origin이 `localhost:3000`이라 CORS는 동일하게 통과한다.
+⚠️ **WebSocket은 상대 경로를 못 쓴다.** 반드시 `ws://host:port/...` 절대 주소여야 해서,
+`ApiConfig.wsUrl`이 `apiBaseUrl`이 비면 **현재 페이지 주소(`Uri.base`)에서 유도**한다. https면 자동으로 `wss`.
 
----
+### 5.2 ⚠️ nginx 상속 함정 (실제로 겪음)
+
+한 `location` 안에서 `proxy_set_header`를 **하나라도** 쓰면 **server 레벨의 `proxy_set_header`가 전부 상속되지 않는다.**
+`/ws/` 블록에 Upgrade/Connection만 적었더니 `Host`가 업스트림 이름(`backend_pool`)으로 나가 핸드셰이크가 **400**으로 거절됐다.
+→ 공통 헤더를 각 location에 다시 적어야 한다.
+
+### 5.3 Dockerfile / 정적 서빙
+
+- `frontend/Dockerfile` — 멀티스테이지(`ghcr.io/cirruslabs/flutter:stable` → `nginx:alpine`), `API_BASE_URL` build-arg
+- `frontend/nginx.conf` — SPA fallback(`try_files … /index.html`) + `index.html` `no-store` / 해시 산출물 장기 캐시
+- ⚠️ **프록시에는 `try_files`를 쓰지 않는다** — 프록시엔 파일이 없어 전부 404가 된다. SPA fallback은 frontend 컨테이너가 담당
+
+> 프론트 UI를 반복 수정할 땐 컨테이너 재빌드가 느리다:
+> `flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8080`
+> (이땐 프록시를 안 거치므로 백엔드를 8080으로 따로 띄우고 CORS 허용 목록을 쓴다)
 
 ## 6. 작업 백로그 (커밋 단위 체크리스트)
 
@@ -479,3 +493,23 @@ flutter doctor                     # Chrome 항목이 ✓ 여야 Web 빌드 가�
 - **Swagger UI가 항상 최신** — 이 문서와 `MVP_API_SPEC.md`가 어긋나면 `http://localhost:8080/swagger-ui/index.html`의 "00. MVP 사용 API" 그룹이 기준이다
 - **백엔드 API가 바뀌면 이 문서 §3·§4도 같이 갱신**한다
 - 패키지 버전은 명시하지 않는다 — `flutter pub add` 시점의 최신 안정판을 쓰고, 확정된 버전은 `pubspec.lock`이 기록한다
+
+---
+
+## 10. ⚠️ 로드밸런싱 — 지금 붙이면 깨진다 (2026-07-28 조사)
+
+프록시(§5)의 `upstream backend_pool` 에 서버를 추가하면 문법상으로는 바로 다중화된다.
+**하지만 백엔드가 아직 다중 인스턴스를 감당하지 못한다.** 실제 코드를 확인해 찾은 블로커 3건:
+
+| # | 블로커 | 증상 | 해결 방향 |
+|---|---|---|---|
+| **L1** | `@Scheduled` **4개**가 인스턴스마다 실행<br>(`LocationSimulationScheduler` 3s · `ConnectionLossScheduler` 10s · `ApproachNoShowScheduler` 15s · `SosEscalationScheduler` 30s) | **알림이 인스턴스 수만큼 중복 발송.** 근접·미승차·SOS 에스컬레이션이 2대면 2번, 3대면 3번 | ShedLock 등 분산 락, 또는 스케줄러 전용 인스턴스 분리 |
+| **L2** | 위치 저장소가 **인메모리**<br>(`InMemoryBusLocationRepository` = `ConcurrentHashMap`) | 기사가 A 인스턴스에 보고한 좌표를 관리자가 B 인스턴스에서 조회하면 **안 보인다**. 관제 지도가 3초마다 깜빡임 | Redis 구현체로 교체 — 이미 `BusLocationRepository` 포트가 있어 **구현체만 추가**하면 된다(호출부 수정 불필요) |
+| **L3** | WebSocket 세션이 인스턴스에 묶임<br>(`LocationSessionRegistry` 인메모리) | 연결 끊김 감지 오작동, 특정 사용자에게 push가 안 감 | 최소: `ip_hash` 세션 어피니티 / 제대로: Redis STOMP 브로커 릴레이 |
+
+> **L2가 가장 저렴하다.** 백엔드가 이미 `LocationSource`/`BusLocationRepository`를 포트로 분리해 뒀기 때문에
+> (`backend/docs/reference.md` §15) Redis 구현체를 추가하고 빈만 바꾸면 된다. Redis 컨테이너도 이미 떠 있다.
+
+**현재 판단**: 이 3건은 **백엔드 작업이고 MVP 범위 밖**이다(트래커 §0의 MVP 5개 기능에 없음).
+프론트 MVP(C5~C14)를 먼저 끝내고, 로드밸런싱이 실제로 필요해지는 시점에 별도 항목으로 다룬다.
+프록시 설정에는 확장 지점(`upstream` + `least_conn`)과 이 경고를 주석으로 남겨뒀다(`infra/proxy/nginx.conf`).
