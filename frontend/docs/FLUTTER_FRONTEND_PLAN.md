@@ -465,6 +465,13 @@ DB/Redis/Kafka 포트(5432·6379·29092)만 호스트에 남겼다 — DB 툴 �
   - ⬜ **남은 것**: 브라우저에서 전 시나리오 육안 점검
     (`docker compose down && up` 후 시드 상태에서 기사·관리자 전 화면 1회씩)
 
+### P6 — 디자인 이식 *(별도 문서로 추적)*
+
+- [~] 🟡 **D0~D9** Claude Design 시안을 11개 화면에 이식 — **진행 추적은 [`DESIGN_MIGRATION_PLAN.md`](DESIGN_MIGRATION_PLAN.md)**
+  - 규칙(토큰·컴포넌트·상태 계약)은 [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md), 원본 시안은 `docs/design/source/`
+  - **순수 표현 계층 교체다** — 로직·API·provider·라우팅을 바꾸지 않는다
+  - C14 의 "전체 시나리오 통합 점검"은 D9 에서 같이 닫는다(같은 브라우저 세션에서 확인)
+
 ---
 
 ## 7. 세션 재개 지점
@@ -554,6 +561,11 @@ C-6(네이밍) 은 전부 **0건**, C-7 기계 검사도 통과. 중도 실패�
 2. **감사 Medium/Low 항목 판단** — 위 표 참조. 판단이 필요한 것이지 기계적 수정이 아니다:
    `notification_tile` 의 DTO 직접 사용을 §4 예외로 인정할지, DTO 의 `?? ''`/`?? 0` 이 실제 서버 계약과 맞는지
 
+### 🎨 진행 중 — 디자인 이식 (2026-07-29~)
+
+Claude Design 시안을 11개 화면에 이식하는 작업이 **`DESIGN_MIGRATION_PLAN.md` 로 분리돼 진행 중**이다.
+프론트 작업을 이어받는 세션은 **이 문서 다음에 그 문서를 읽는다.** 위 1번(브라우저 육안 확인)은 그쪽 D9 에 흡수됐다.
+
 ### 남은 작업
 
 - **C14 의 "전체 시나리오 통합 점검"** (UI 통일 부분은 완료)
@@ -615,6 +627,35 @@ docker compose up -d --build      # Docker 29.4.1 / Compose v5.1.3 확인됨
 
 > `find`로 앱을 찾을 때 주의 — 이 환경의 셸은 rtk 프록시를 거치면서 **`find` 출력이 뭉개진다**
 > (`0 for '*docker*'`처럼 잘못된 요약이 나온다). 파일 존재 확인은 `ls`나 `rtk proxy find`를 쓸 것.
+
+### 🔧 배포했는데 옛 화면이 보인다 → **service worker 캐시** (2026-07-29 확인)
+
+증상: 컨테이너를 다시 빌드해도 브라우저에 **자리표시자(`"C6 에서 구현"`) 같은 옛 화면**이 그대로 나온다.
+`docker compose down` + 이미지·볼륨 삭제 후 재빌드해도 안 고쳐진다.
+
+**원인은 서버가 아니라 브라우저다.** Flutter Web 의 `flutter_bootstrap.js` 가 service worker 를 등록하는데,
+이전 빌드 때 설치된 SW 가 살아남아 fetch 를 **네트워크보다 앞단에서 가로챈다**. 요청이 서버까지 오지 않으므로
+nginx 가 `Cache-Control: no-cache` 를 줘도 소용없고, 컨테이너를 아무리 지워도 그대로다.
+
+**서버/브라우저 중 어느 쪽인지 가르는 법** (추측하지 말 것):
+
+```bash
+export PATH="/Applications/Code/Docker.app/Contents/Resources/bin:$PATH"
+docker exec school-bus-frontend-1 md5sum /usr/share/nginx/html/main.dart.js
+curl -s http://localhost/main.dart.js | md5        # 위와 같으면 서버는 정상
+```
+
+⚠️ **번들에서 한글을 grep 할 때 주의** — dart2js 는 비ASCII 를 **소문자 `\uXXXX` 이스케이프**로 저장한다.
+`grep '오늘 태울'` 은 새 문구조차 0건이 나와 **"빌드가 안 됐다"고 오판하게 된다.**
+`grep -a '오늘'` 처럼 이스케이프 형태로 찾아야 한다.
+
+**해결 (브라우저에서)**: `F12` → Application → Service Workers → `Unregister` → Storage → `Clear site data`.
+`Cmd+Shift+R`(강력 새로고침)은 **HTTP 캐시만** 비우고 SW 는 우회하지 못해 효과가 없을 수 있다.
+빠른 판별은 **시크릿 창**(SW 를 공유하지 않는다)으로 열어보는 것.
+
+> 현재 Flutter 버전이 배포하는 `flutter_service_worker.js` 는 **설치되자마자 스스로 unregister 하는 스텁**이라,
+> 한 번 정리하면 새 캐시를 다시 만들지 않는다. 개발 중 이 변수를 아예 없애려면
+> Dockerfile 의 빌드 명령에 `--pwa-strategy=none` 을 주는 방법도 있다(미적용).
 
 ### ⛔ C1 블로커 — Flutter SDK 미설치
 
