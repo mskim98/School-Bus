@@ -98,11 +98,7 @@ void main() {
     test('로그인 화면에 붙잡아 둔다 — 거기서 "준비 중" 안내를 띄운다', () {
       for (final role in [Role.student, Role.parent]) {
         final user = session(role);
-        expect(
-          go(AppRoutes.login, as: user),
-          isNull,
-          reason: '${role.wireName}',
-        );
+        expect(go(AppRoutes.login, as: user), isNull, reason: role.wireName);
         expect(go(AppRoutes.driverRoute, as: user), AppRoutes.login);
         expect(go(AppRoutes.adminMonitor, as: user), AppRoutes.login);
       }

@@ -21,7 +21,14 @@ COPY . .
 # API_BASE_URL 은 "브라우저가 보는 주소"다. 컨테이너 이름(backend:8080)이 아니라 localhost:8080 —
 # 요청 주체가 컨테이너가 아니라 사용자 브라우저이기 때문. 배포 시 build-arg 로 덮어쓴다.
 ARG API_BASE_URL=http://localhost:8080
-RUN flutter build web --release --dart-define=API_BASE_URL=$API_BASE_URL
+
+# 기능 테스트용 빠른 로그인(시드 계정 원터치) 노출 여부. **기본값 false** —
+# 운영 이미지를 빌드할 때 아무것도 안 넘기면 자동으로 꺼진다(트리 셰이킹으로 코드도 사라짐).
+ARG ENABLE_QUICK_LOGIN=false
+
+RUN flutter build web --release \
+    --dart-define=API_BASE_URL=$API_BASE_URL \
+    --dart-define=ENABLE_QUICK_LOGIN=$ENABLE_QUICK_LOGIN
 
 FROM nginx:alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf

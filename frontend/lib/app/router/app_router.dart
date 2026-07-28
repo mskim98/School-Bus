@@ -50,6 +50,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AppShell(
           navigationShell: shell,
+          // 기사는 운행 중 폰으로 쓴다 — 데스크톱에서 열어도 모바일 레이아웃을 유지한다.
+          forceCompact: true,
           destinations: const [
             ShellDestination(
               label: '오늘의 노선',

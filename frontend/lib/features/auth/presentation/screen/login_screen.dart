@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_spacing.dart';
+import '../../../../core/config/feature_flags.dart';
 import '../../../../core/ui/error_message.dart';
 import '../../../../shared/domain/role.dart';
 import '../../application/auth_controller.dart';
+import '../widget/quick_login_panel.dart';
 
 /// 로그인 화면. 모든 역할이 같은 화면을 쓰고, 진입 화면 분기는 라우터가 한다(C5).
 class LoginScreen extends ConsumerStatefulWidget {
@@ -122,6 +124,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           )
                         : const Text('로그인'),
                   ),
+
+                  if (FeatureFlags.enableQuickLogin) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    QuickLoginPanel(enabled: !isSubmitting),
+                  ],
                 ],
               ),
             ),

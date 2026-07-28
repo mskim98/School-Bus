@@ -31,12 +31,20 @@ class AppShell extends ConsumerWidget {
     super.key,
     required this.navigationShell,
     required this.destinations,
+    this.forceCompact = false,
   });
 
   /// go_router 의 [StatefulShellRoute] 가 넘겨주는 브랜치 상태.
   /// 탭을 옮겨도 각 탭의 스크롤 위치·입력값이 유지된다.
   final StatefulNavigationShell navigationShell;
   final List<ShellDestination> destinations;
+
+  /// 화면 폭과 무관하게 모바일 레이아웃을 강제한다.
+  ///
+  /// **기사 화면이 이걸 켠다.** 기사는 운행 중 폰으로 쓰는 게 전제라, 데스크톱
+  /// 브라우저에서 열었다고 관제용 넓은 레이아웃을 보여주면 실제와 다른 화면을
+  /// 검증하게 된다. 넓은 화면에서는 폰 폭으로 가운데 정렬해 보여준다.
+  final bool forceCompact;
 
   void _onSelect(int index) {
     // 이미 선택된 탭을 다시 누르면 그 탭의 첫 화면으로 되돌린다(흔한 기대 동작).
@@ -48,10 +56,16 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isWide = MediaQuery.sizeOf(context).width >= AppBreakpoints.compact;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isWide = !forceCompact && screenWidth >= AppBreakpoints.compact;
     final current = navigationShell.currentIndex;
 
-    return Scaffold(
+    // 기사 화면을 넓은 모니터에서 열면 폰 폭으로 좁혀 가운데 둔다 —
+    // 실제 사용 환경과 같은 비율로 확인하기 위함이다.
+    final needsPhoneFrame =
+        forceCompact && screenWidth >= AppBreakpoints.compact;
+
+    final scaffold = Scaffold(
       appBar: AppBar(
         title: Text(destinations[current].label),
         actions: const [_AccountButton()],
@@ -91,6 +105,30 @@ class AppShell extends ConsumerWidget {
                   ),
               ],
             ),
+    );
+
+    if (!needsPhoneFrame) return scaffold;
+
+    return ColoredBox(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: AppBreakpoints.compact),
+          // MediaQuery 를 좁혀서 넘겨준다 — 안쪽 화면이 자기 폭을 물어봤을 때
+          // 모니터 폭이 아니라 프레임 폭을 보게 해야 반응형 분기가 실제와 맞는다.
+          child: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                size: Size(
+                  AppBreakpoints.compact,
+                  MediaQuery.sizeOf(context).height,
+                ),
+              ),
+              child: scaffold,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
