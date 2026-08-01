@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../app/router/app_routes.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/ui/app_action_button.dart';
@@ -10,10 +13,16 @@ import '../../../../core/ui/async_section.dart';
 import '../../../../core/ui/empty_view.dart';
 import '../../../../core/ui/error_message.dart';
 import '../../../../core/ui/skeleton_box.dart';
+import '../../../../shared/domain/stop_key.dart';
 import '../../../drivesession/application/drive_session_controller.dart';
+import '../../../drivesession/domain/drive_session.dart';
+import '../../../routing/application/driver_route_controller.dart';
+import '../../../routing/domain/route_stop_group.dart';
 import '../../application/driver_roster_controller.dart';
+import '../../domain/roster_stop_group.dart';
 import '../widget/drive_start_view.dart';
 import '../widget/end_drive_sheet.dart';
+import '../widget/roster_stop_group_card.dart';
 import '../widget/roster_student_tile.dart';
 
 /// 기사의 승하차 기록 화면 — **하루 중 가장 오래 머무는 화면**.
@@ -101,6 +110,14 @@ class _RosterListState extends ConsumerState<_RosterList> {
   /// 싣게 되면 이 계산은 통째로 사라진다.
   Set<int> _failed = const {};
 
+  /// 사용자가 **직접 접거나 편** 그룹만 기억한다.
+  ///
+  /// 기본값(끝난 그룹은 접고 나머지는 편다)까지 여기에 저장하면, 서버 응답이 와서
+  /// 그룹이 끝난 순간 화면이 사용자 조작을 덮어쓴다. 규칙은 매번 계산하고 예외만
+  /// 담아두는 이유가 이것이다. 키는 순번이 아니라 **첫 학생의 id** 다 — 노선이
+  /// 뒤늦게 도착하면 순번이 통째로 바뀌지만 학생은 그대로다.
+  final Map<int, bool> _toggled = {};
+
   @override
   Widget build(BuildContext context) {
     ref.listen(driverRosterControllerProvider, _trackFailures);
@@ -115,12 +132,35 @@ class _RosterListState extends ConsumerState<_RosterList> {
       );
     }
 
+    // 명단 그룹의 순번 배지는 **노선 탭 지도 마커의 번호와 같아야** 한다 — 기사가
+    // "지도의 ②가 명단의 ②"라고 읽을 수 있어야 하기 때문이다. 그런데 명단 응답은
+    // 노선 순서가 아니라서 노선을 여기서 같이 읽어 `좌표 → 순번` 표로 넘긴다.
+    // 명단 상태 계층이 `routing` 기능을 직접 참조하지 않도록(검사 C-1) 화면이 값으로
+    // 넘겨준다 — `DriverLocationCard(mockPath:)` 와 같은 방식이다.
+    final routeGroups = _routeGroups(direction);
+    final groups = RosterStopGroup.group(
+      state.students,
+      direction: direction,
+      // 노선이 아직 안 왔으면 표 없이 묶는다. 도메인이 명단 등장 순으로 번호를
+      // 매기므로 **노선 때문에 명단이 안 뜨는 일은 없다**.
+      seqByStop: routeGroups.isEmpty
+          ? null
+          : {for (final g in routeGroups) StopKey.of(g.point): g.seq},
+    );
+
     return RefreshIndicator(
       onRefresh: () =>
           ref.read(driveSessionControllerProvider.notifier).refresh(),
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
+          _NextStopSummary(
+            group: _nextGroup(groups),
+            etaByStop: {
+              for (final g in routeGroups) StopKey.of(g.point): g.etaLabel,
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
           _ProgressHeader(state: state),
           if (state.recordError case final error?) ...[
             const SizedBox(height: AppSpacing.md),
@@ -132,23 +172,61 @@ class _RosterListState extends ConsumerState<_RosterList> {
             ),
           ],
           const SizedBox(height: AppSpacing.md),
-          for (final student in state.students) ...[
-            RosterStudentTile(
-              student: student,
-              direction: direction,
-              isPending: state.isPending(student.studentId),
-              hasFailed: _failed.contains(student.studentId),
-              onAction: (type) => ref
-                  .read(driverRosterControllerProvider.notifier)
-                  .record(student.studentId, type),
+          for (final group in groups) ...[
+            RosterStopGroupCard(
+              group: group,
+              expanded: _isExpanded(group),
+              onToggle: () => setState(
+                () => _toggled[group.students.first.studentId] = !_isExpanded(
+                  group,
+                ),
+              ),
+              rowBuilder: (context, student) => RosterStudentTile(
+                student: student,
+                direction: direction,
+                isPending: state.isPending(student.studentId),
+                hasFailed: _failed.contains(student.studentId),
+                onAction: (type) => ref
+                    .read(driverRosterControllerProvider.notifier)
+                    .record(student.studentId, type),
+              ),
             ),
-            // 오탭 방지 — 버튼끼리 충분히 떨어뜨린다(§3.3).
+            // 오탭 방지 — 카드끼리 충분히 떨어뜨린다(§3.3).
             const SizedBox(height: AppSpacing.md),
           ],
           const _RecordNotice(),
         ],
       ),
     );
+  }
+
+  /// 처리가 끝난 정차는 접는다 — 25명 명단에서 접기가 실제로 스크롤을 줄여야
+  /// 의미가 있다. 사용자가 직접 토글했으면 그 선택이 이긴다.
+  bool _isExpanded(RosterStopGroup group) =>
+      _toggled[group.students.first.studentId] ?? !group.isDone;
+
+  /// 아직 처리가 남은 첫 정차. 없으면 오늘 갈 곳이 더 없다는 뜻이다.
+  RosterStopGroup? _nextGroup(List<RosterStopGroup> groups) {
+    for (final group in groups) {
+      if (!group.isDone) return group;
+    }
+    return null;
+  }
+
+  /// 지금 운행 방향에 해당하는 노선의 정차들. 노선이 없으면 빈 목록이다.
+  ///
+  /// 방향을 `wireName` 으로 맞추는 이유: `DriveDirection` 과 `RouteDirection` 은
+  /// 값이 같지만 feature 가 달라 일부러 별개 enum 으로 둔 것이라(컨벤션 C-1),
+  /// 서버가 쓰는 문자열이 둘을 잇는 유일한 공통 기준이다.
+  List<RouteStopGroup> _routeGroups(DriveDirection direction) {
+    final plans = ref.watch(driverRouteControllerProvider).value?.plans;
+    if (plans == null) return const [];
+    for (final plan in plans) {
+      if (plan.direction.wireName == direction.wireName) {
+        return RouteStopGroup.group(plan.stops);
+      }
+    }
+    return const [];
   }
 
   void _trackFailures(
@@ -171,6 +249,96 @@ class _RosterListState extends ConsumerState<_RosterList> {
     if (!setEquals(updated, _failed)) {
       setState(() => _failed = updated);
     }
+  }
+}
+
+/// 명단 최상단 — **다음에 갈 곳**과 노선 탭으로 가는 문(시안 378~391줄).
+///
+/// 명단만 보고 있으면 "다음에 어디로 가는가"가 안 보인다. 그렇다고 이 화면에 지도를
+/// 또 얹으면 명단이 밀린다 — 한 줄 요약을 두고 지도는 노선 탭에 맡긴다.
+class _NextStopSummary extends StatelessWidget {
+  const _NextStopSummary({required this.group, required this.etaByStop});
+
+  /// 아직 처리가 남은 첫 정차. null 이면 갈 곳이 더 없다.
+  final RosterStopGroup? group;
+
+  /// 노선에서 얻은 `좌표 → 도착 예정` 표. 노선이 없으면 비어 있다.
+  final Map<StopKey, String> etaByStop;
+
+  /// 지도 썸네일 자리. 시안(64×40)의 세로 크기를 그대로 쓴다.
+  static const double _thumb = 40;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final stop = group;
+
+    // ETA 는 노선에서만 온다. 노선이 아직 없으면 그 조각만 빠지고 버튼은 살아 있다.
+    final key = stop?.key;
+    final eta = key == null ? null : etaByStop[key];
+
+    final title = stop == null ? '지도에서 경로 보기' : '다음 정차 · ${stop.title}';
+    final subtitle = stop == null
+        ? '남은 정차가 없습니다'
+        : [?eta, '지도에서 경로 보기'].join(' · ');
+
+    return Semantics(
+      button: true,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          // 셸의 탭을 화면이 직접 조작하지 않는다 — 경로로만 이동한다(§8).
+          onTap: () => context.go(AppRoutes.driverRoute),
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: AppTouch.primary),
+            padding: const EdgeInsets.all(AppSpacing.smd),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainer,
+              // 카드가 아니라 **한 줄짜리 버튼**이라 12 다(§3.2).
+              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: _thumb,
+                  height: _thumb,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    // 지도 색은 표면색과 공유하지 않는다(§1.3) — 이 자리가
+                    // "지도로 가는 문"으로 읽혀야 한다.
+                    color: context.appColors.mapBase,
+                    borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                  ),
+                  child: Icon(
+                    Icons.map_outlined,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.smd),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(title, style: theme.textTheme.titleSmall),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(subtitle, style: AppTypography.caption(context)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Icon(
+                  Icons.chevron_right,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
