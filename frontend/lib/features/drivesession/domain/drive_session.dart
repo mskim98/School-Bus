@@ -1,3 +1,4 @@
+import '../../../core/map/spec/map_view_adapter.dart';
 import '../data/dto/drive_session_dto.dart';
 
 /// 운행 방향.
@@ -76,6 +77,7 @@ class RosterEntry {
     required this.studentId,
     required this.name,
     this.location,
+    this.point,
   });
 
   final int studentId;
@@ -84,9 +86,22 @@ class RosterEntry {
   /// 등원이면 승차 정류장, 하원이면 하차지.
   final String? location;
 
+  /// 승차 정류장 또는 하차지의 좌표.
+  ///
+  /// 표시용이 아니라 **묶음용**이다 — 서버가 명단을 학생 단위로 주기 때문에,
+  /// 화면이 "이 정류장에서 2명"처럼 정차 단위로 그리려면 좌표로 묶는 수밖에 없다
+  /// (`shared/domain/stop_key.dart`). 서버가 정차 id 를 안 준다.
+  ///
+  /// 좌표가 없는 학생(정류장 미지정 등)은 null 이고, 그런 학생은 묶이지 않고
+  /// 각자 한 그룹이 된다.
+  final GeoPoint? point;
+
   static RosterEntry fromDto(DriveSessionRosterEntryDto dto) => RosterEntry(
     studentId: dto.studentId,
     name: dto.name,
     location: dto.location,
+    point: dto.lat == null || dto.lng == null
+        ? null
+        : GeoPoint(dto.lat!, dto.lng!),
   );
 }
