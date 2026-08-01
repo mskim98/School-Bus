@@ -1,3 +1,4 @@
+import '../../../core/map/spec/map_view_adapter.dart';
 import '../../drivesession/domain/drive_session.dart';
 import 'ride_event.dart';
 
@@ -35,6 +36,7 @@ class RosterStudent {
     required this.name,
     required this.status,
     this.location,
+    this.point,
     this.updatedAt,
   });
 
@@ -43,6 +45,9 @@ class RosterStudent {
 
   /// 등원이면 승차 정류장, 하원이면 하차지.
   final String? location;
+
+  /// [location] 의 좌표. 명단을 정차 단위로 묶는 키다(`RosterStopGroup`).
+  final GeoPoint? point;
 
   final RideStatus status;
 
@@ -69,6 +74,7 @@ class RosterStudent {
     studentId: studentId,
     name: name,
     location: location,
+    point: point,
     status: RideStatus.of(event.type),
     updatedAt: event.occurredAt,
   );
@@ -100,6 +106,7 @@ class RosterStudent {
           studentId: entry.studentId,
           name: entry.name,
           location: entry.location,
+          point: entry.point,
           status: RideStatus.of(latest[entry.studentId]?.type),
           updatedAt: latest[entry.studentId]?.occurredAt,
         ),

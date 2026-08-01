@@ -60,14 +60,30 @@ class DriverRouteState {
 
   bool get isEmpty => plans.isEmpty;
 
-  /// 지금 보여줄 노선. 고른 게 없으면 첫 번째.
+  /// 지금 보여줄 노선. 고른 게 없으면 서버가 먼저 준 방향의 것.
   RoutePlan? get current {
     if (plans.isEmpty) return null;
-    if (selected == null) return plans.first;
+    final direction = selected ?? plans.first.direction;
+    return _latestOf(direction) ?? plans.first;
+  }
+
+  /// 같은 방향 중 **가장 최신 회차**.
+  ///
+  /// ⚠️ 같은 버스·방향으로 다시 배차하면 서버가 기존 행을 고치지 않고
+  /// **`version` 을 올린 새 행**을 만든다(`RoutePlan.version` 주석). 그런데 기사
+  /// 조회는 `findByBusIdAndServiceDateAndStatusOrderByDirectionAsc` 로 **방향으로만
+  /// 정렬**해서 주므로 목록의 앞이 최신이라는 보장이 없다. 첫 줄을 그대로 쓰면
+  /// 재배차 **전의 옛 노선**으로 기사가 운행할 수 있다.
+  ///
+  /// 서버 정렬을 고치는 게 정공법이지만 백엔드 변경을 최소화하기로 해서
+  /// 클라이언트가 방어한다 — 목록이 몇 건뿐이라 비용도 없다.
+  RoutePlan? _latestOf(RouteDirection direction) {
+    RoutePlan? latest;
     for (final plan in plans) {
-      if (plan.direction == selected) return plan;
+      if (plan.direction != direction) continue;
+      if (latest == null || plan.version > latest.version) latest = plan;
     }
-    return plans.first;
+    return latest;
   }
 
   /// 방향 탭을 보여줄지 — 등원·하원이 둘 다 있을 때만 의미가 있다.
