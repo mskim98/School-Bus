@@ -173,6 +173,10 @@ lib/
 - [ ] `lib/features/*/application/**` 에서 `package:flutter/material.dart` import → **위반** (상태 계층이 위젯을 알면 안 됨)
 - [ ] `lib/core/**` 에서 `lib/features/**` import → **위반** (core 는 feature 를 몰라야 함)
 - [ ] feature A 의 코드가 feature B 의 `data/`·`application/` 을 직접 import → **위반** (공용은 `shared/` 로)
+  - **허용되는 단 하나의 예외: `presentation/` 이 다른 feature 의 `application/` provider 를 `ref.watch` 해 그 값을 아래로 넘기는 경우.** 기사 화면은 노선·명단·위치가 한 화면 안에서 서로를 참조해야 성립하는데(지도 마커 번호 = 명단 그룹 번호, 정차 진행률 = 승하차 상태), 이걸 상태 계층에서 엮으면 두 컨트롤러가 서로를 다시 빌드시켜 무한 루프가 되거나 한쪽 로딩이 다른 쪽을 막는다. 그래서 **조립만 화면에서 하고, application/domain/data 는 계속 서로를 모른다.**
+  - 조건 3개를 모두 지켜야 예외다: ① import 하는 쪽이 `presentation/` 일 것 ② 읽기(`ref.watch`)만 하고 다른 feature 의 컨트롤러 메서드를 **호출하지 않을** 것 ③ 상대가 없거나 로딩 중이어도 **내 화면은 그려질 것**(예: 노선이 없으면 명단 그룹 번호를 1부터 매긴다)
+  - 선례: `DriverLocationCard(mockPath:)`(`features/location/presentation/widget/driver_location_card.dart:18-19`), `DriverRosterScreen` ↔ `DriverRouteScreen` 의 정차 그룹 번호 공유(`DESIGN_SYSTEM.md` §5.4-4)
+  - ⚠️ `features/rideevent/application/driver_roster_controller.dart` → `features/drivesession/application/` 은 이 예외에 **해당하지 않는 기존 위반**이다. 파일 상단 주석대로 언젠가 `shared/` 로 올려야 한다 — 새 코드가 이걸 선례로 삼지 마라
 
 ### C-2. DTO / 파싱
 - [ ] `presentation/`·`application/` 에 `jsonDecode`·`json[` 문자열 키 접근 → **위반** (§4, §8)

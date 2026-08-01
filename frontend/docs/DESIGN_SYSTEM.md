@@ -25,6 +25,8 @@
 
 **새 화면에서 새 hex 를 만들지 않는다.** 아래 역할 중 하나를 고른다. 위젯에 `Color(0xFF…)` 리터럴을 쓰면 그 자체로 위반이다.
 
+> **런타임은 라이트 고정이다**(2026-07-29). `MaterialApp` 이 `themeMode: ThemeMode.light` 로 잠겨 있어 OS 를 다크로 바꿔도 앱은 라이트로 뜬다. 아래 표의 **다크 열은 참조용으로 남긴다** — 시안이 다크 토큰을 함께 갖고 있어 대조에 쓰이고, `AppTheme.dark`·`AppColors.dark` 정의도 코드에 그대로 있다. 다크를 켜려면 `app.dart` 한 곳만 되돌리면 된다.
+
 ### 1.1 M3 `ColorScheme` 이 커버하는 역할
 
 | 역할 | 라이트 | 다크 | 쓰는 곳 |
@@ -75,6 +77,8 @@
 | `onWarningContainer` | `#2B1D00` | `#FFDF9E` | |
 | `mapBase` | `#E7EBE3` | `#22262B` | 지도 배경(타일 톤) |
 | `mapLine` | `#CFD6C8` | `#343A40` | 도로망 선 |
+
+> **경로선 케이싱**(2026-07-29 추가): 시안의 지도는 도로망이 단색 배경 위 굵은 선 몇 개뿐이라 `primary` 9px 만으로 충분했지만, 실제 화면은 **OSM 타일** 위다. 회색 도로선과 겹치면 어느 쪽이 우리 경로인지 잠깐 봐서는 안 읽힌다. 그래서 `borderColor: onPrimaryContainer`(`#001945`) `borderStrokeWidth: 3` 케이싱을 두른다. **본선 색과 굵기는 위 표 그대로다** — 대비가 부족하다고 새 색을 만들지 않는다.
 
 > **지도 색은 표면색과 절대 공유하지 않는다.** 지도가 카드처럼 보이면 "여기가 지도"라는 인지가 깨진다.
 
@@ -232,7 +236,8 @@ M3 기본값은 `SegmentedButton` 40dp · `ChoiceChip`류 32dp 로 **둘 다 §3
 |---|---|---|
 | **`RideStatusChip`** | `features/rideevent/presentation/widget/` | **§4 표를 코드로 옮긴 유일한 지점.** 화면에서 상태 칩을 다시 만들지 않는다. 내부는 `AppStatusChip` 을 톤 매핑해 호출 |
 | `RosterStudentTile` (학생 행) | `features/rideevent/presentation/widget/` | radius 12, padding 16, gap 16, `outlineVariant` 테두리.<br>아바타 44 원형(이니셜 1자, `surfaceContainerHigh`) · 이름 `titleMedium` · 장소 `bodySmall` · 상태 칩 · 우측 액션 열 **112dp 고정**.<br>NO_SHOW: 행 배경 `errorContainer` + 테두리 `error` + 아바타도 errorContainer.<br>실패: 테두리 `error`. 완료: `opacity .75` |
-| `RouteStopTile` (정차 카드) | `features/routing/presentation/widget/` | radius 12, padding 14, gap 14. 좌측 순번 배지 32 원형.<br>**다음 정차**: 카드 `primaryContainer`, 배지 `primary`, 태그 `primary`.<br>**예정**: 카드 `surfaceContainer`, 배지·태그 `surfaceContainerHigh`.<br>**완료**: 위와 같고 `opacity .6`.<br>우측에 ETA(`titleSmall`) + 진행률(`3/5명`, `bodySmall`) |
+| `RosterStopGroupCard` (정차 그룹) | `features/rideevent/presentation/widget/` | **명단을 정차 단위로 묶는 카드**(§5.4). radius **20**, 배경 **`surface`** + `outlineVariant` 테두리 — `surfaceContainer` 로 두면 같은 색인 `RosterStudentTile` 이 카드에 잠긴다. 테두리로만 구획하고 학생 행이 한 단 떠 보이게 한다.<br>헤더 버튼 56dp: 순번 배지 32 원형 · 제목 `titleMedium` · 태그(`승차`/`하차`) · 진행률 `1/2명` · 접힘 화살표. **완료 그룹은 톤만 바꾸지 않고** 체크 아이콘 + `n/n명` 을 같이 낸다(§0-1).<br>본문은 `RosterStudentTile` 을 **그대로 재사용**한다 — 상태 계약(§4)을 그룹이 다시 정의하지 않는다.<br>**기본 펼침**: 처리가 끝난 그룹은 접고 나머지는 편다(25명 대비). 사용자가 직접 토글하면 그 선택이 우선.<br>**순번 배지는 텍스트 배율에 비례해 키운다** — 32 고정이면 두 자리 순번이 200% 에서 원 밖으로 밀린다 |
+| `RouteStopGroupTile` (정차 카드) | `features/routing/presentation/widget/` | radius 12, padding 14, gap 14. 좌측 순번 배지 32 원형.<br>**다음 정차**: 카드 `primaryContainer`, 배지 `primary`, 태그 `primary`.<br>**예정**: 카드 `surfaceContainer`, 배지·태그 `surfaceContainerHigh`.<br>**완료**: 위와 같고 `opacity .6`.<br>우측에 ETA(`titleSmall`) + 진행률(`3/5명`, `bodySmall`) |
 | `NotificationTile` (알림 행) | `features/notification/presentation/widget/` | 좌측 40 원형 아이콘(유형별 톤) · 유형 라벨(`bodySmall`) · `NEW` 배지(`primary` 바탕, `labelSmall`) · 문구(`bodyLarge`) · 우측 시각(mono).<br>**새 알림 행은 배경 `surfaceContainer`**, 읽은 것은 투명 |
 
 **알림 유형별 톤**: 미승차 `error` · 근접 `primary` · 노선 배포 `neutral` · **승하차 알림은 §4 상태 톤을 그대로 따른다**(승차 `primary` · 하차 `warning` · 인계 `success`).
@@ -243,13 +248,49 @@ M3 기본값은 `SegmentedButton` 40dp · `ChoiceChip`류 32dp 로 **둘 다 §3
 
 | 요소 | 명세 |
 |---|---|
-| 경로선 | `primary`, 굵기 9, 둥근 끝/이음 |
+| 경로선 | `primary`, 굵기 **6**, 둥근 끝/이음 + **케이싱 `onPrimaryContainer` 2px**(아래 참조) |
+| 버스 현재 위치 | `MapMarkerKind.bus`. **마커 목록의 맨 뒤에 넣어 정차 마커 위에 그린다** — 정차했을 때 가리면 "지금 어디쯤"이 안 보인다. `_fit()`·재조정 판단에서는 **제외**(아래 참조) |
 | 지나온 경로 | `onPrimaryContainer`, **불투명도 0.35** |
-| 다음 정차 마커 | 34 원형 **채움** `primary`/`onPrimary` + 옆에 `다음 정차` 라벨 칩 |
-| 예정 정차 마커 | 34 원형 **테두리만** — 배경 `surface`, 3px `primary` 테두리 |
+| 다음 정차 마커 | 34 원형 **채움** `primary`/`onPrimary`(`MapMarkerKind.stop`) + 옆에 `다음 정차` 라벨 칩 |
+| 예정 정차 마커 | 34 원형 **테두리만**(`MapMarkerKind.upcomingStop`) — 배경 `surface`, 3px `primary` 테두리 |
+| 카메라 버튼 | 지도 우하단 52dp **4개**(`확대`·`축소`·`내 위치`·`전체 경로`). `MapCameraController` 포트를 통해서만 움직인다 — 화면이 `MapController`(flutter_map)를 직접 들면 지도 교체가 불가능해진다.<br>`내 위치` 는 좌표가 없으면 **숨긴다**(회색 버튼은 "고장"으로 읽힌다) |
+| 지도 조작 | 회전은 **막는다**(운전 중 오조작으로 지도가 돌아가는 사고만 만든다). 확대는 `pinch`·**휠**·**더블탭**을 모두 연다 — `pinch` 만 두면 마우스로는 확대가 아예 안 되고, 장갑 낀 손으로 두 손가락 조작을 요구할 수 없어 **버튼도 따로 둔다** |
 | 출발/도착지(학원) | 36 사각 radius 10, `onSurface` 바탕 |
 | 버스 현재 위치 | 중앙 원(`onSurface`, 3px `surface` 테두리) + **펄스 링**(`primary` 25%, 2s `scale(1→2.4)` 페이드아웃) |
 | 지도 배경 | `AppColors.mapBase` / 도로선 `AppColors.mapLine` — **표면색 재사용 금지** |
+
+---
+
+### 5.4 ★ 정차 그룹핑 — 서버는 학생 단위, 화면은 정차 단위
+
+**서버는 정차를 학생 단위로 준다.** `GET /api/route-plans/driver/{busId}` 의 `stops[]` 도, 운행 명단도 학생 한 명당 한 줄이다. 실측(2026-07-29) 기준 정차 2곳에 대해 **6줄**이 온다.
+
+```
+seq=1 studentId=5  37.5010,127.0275  eta=0
+seq=2 studentId=4  37.5010,127.0275  eta=0     ← 같은 정류장
+seq=3 studentId=2  37.5010,127.0275  eta=0
+seq=4 studentId=1  37.5010,127.0275  eta=0
+seq=5 studentId=6  37.5045,127.0310  eta=192   ← 다른 정류장
+seq=6 studentId=3  37.5045,127.0310  eta=192
+```
+
+그대로 그리면 **마커 6개가 두 좌표에 겹쳐 찍히고** 정차 카드가 `학생 #5` 6장이 된다. 시안은 마커 2개·카드 2장이다.
+
+**규칙**
+
+1. **묶는 키는 좌표뿐이다** — 서버가 정차 id 를 주지 않는다. `shared/domain/stop_key.dart` 의 `StopKey` 가 소수점 5자리(≈1m)로 반올림한 키를 만든다. `double` 을 그대로 비교하면 마지막 자리가 흔들릴 때 그룹이 조용히 쪼개진다
+2. **등원·하원 모두 같은 규칙**이다. 등원은 같은 `boarding_stop` 학생들이 자연히 묶이고, 하원은 하차 주소가 학생별이라 대개 1명씩이다. **하원을 정류장으로 묶지 않는다**(§8.1 D1)
+3. **정차 번호는 1부터 다시 매긴다.** 서버 `stops[].seq` 는 정차 번호가 아니라 **학생 번호**라 그대로 쓰면 건너뛴다 — 실측(2026-07-29 등원)에서 정차 2곳에 `seq` 1·3 이 나왔고, 기사는 ①③ 을 보고 "②는 어디 갔나"를 찾는다. 방문 **순서**만 서버 `seq` 를 따르고 번호는 클라이언트가 붙인다
+4. **노선과 명단이 같은 키를 써야** 지도 마커 번호와 명단 그룹 번호가 맞는다. 명단은 노선이 매긴 번호를 `seqByStop` 으로 **주입받는다**. 노선에 없는 정차(정류장 미지정 학생 등)는 **이미 쓰인 번호 뒤에서 이어 붙인다** — 목록 위치로 매기면 노선 번호와 부딪쳐 같은 번호가 둘이 된다
+5. **주입은 presentation 계층에서만** 한다 — `DriverRosterScreen` 이 노선을, `DriverRouteScreen` 이 명단을 `ref.watch` 해 값으로 넘긴다. application/domain/data 계층은 서로를 모른다(컨벤션 C-1). `DriverLocationCard(mockPath:)` 가 쓰는 것과 같은 방식이다
+6. **정류장 이름은 운행을 시작해야 온다.** 노선 응답에 이름이 없고 명단(`location`)에만 있다. 시작 전에는 **`1번 정차`**, 시작 후에는 **`정류장 A`** 로 보인다. 이름을 지어내지 않는다
+7. **진행률의 분모는 명단 실인원이다.** 노선은 배차 시점에 만들어지고 결석 신고는 그 뒤에 들어오므로 **결석 학생은 노선에 남고 명단에서만 빠진다**. 분모를 노선 인원으로 잡으면 그 정차가 영원히 미완료가 되어 "다음 정차"가 거기서 멈춘다. 전원 결석인 정차는 `대상 없음` 으로 표시하고 완료로 친다
+
+| | 시작 전 | 시작 후 |
+|---|---|---|
+| 제목 | `1번 정차` | `정류장 A` |
+| 보조줄 | `2명` | `김민준 외 1명` |
+| 진행률 | 없음(`정차 2곳`) | `0/2명`(`남은 정차 2곳`) |
 
 ---
 
@@ -298,6 +339,26 @@ M3 기본값은 `SegmentedButton` 40dp · `ChoiceChip`류 32dp 로 **둘 다 §3
 시안 자신도 푸터에 같은 취지를 적어 뒀다: *"학생 사진·연락처·좌석도·통계·QR은 API에 없어 시스템에도 포함하지 않았습니다."*
 
 **시안에 있으나 우리 API 로는 아직 못 만드는 것** — 오프라인 큐잉(`기록은 저장 후 재전송됩니다`)은 현재 클라이언트에 재전송 큐가 없다. 배너 문구를 그대로 쓰면 **거짓말이 된다**. 구현 전까지는 문구를 `연결이 끊겼습니다 · 기록이 전송되지 않을 수 있습니다` 로 쓴다.
+
+### 8.1 시안이 틀려서 고쳐 구현한 것 (2026-07-29 확정)
+
+지시서 우선 원칙(머리말)에 따라 **시안을 따르지 않기로 판정한** 항목이다. 근거는 `report/2026-07-29-driver-mockup-gap-analysis.md`.
+
+| # | 시안 | 왜 안 따르는가 | 실제 구현 |
+|---|---|---|---|
+| **D1** | 하원 명단을 `정류장 A` / `정류장 B` 로 묶고 `서초구 방면` 부제를 붙였다(시안 746-748) | **하원은 학생이 각자의 하차지에서 내린다.** 백엔드가 하원이면 `student.getDropoffAddress()` 를 준다. 시드도 세 학생의 주소가 전부 다르다. `○○구 방면` 이라는 상위 분류는 **API 에 없는 값**이다 | 좌표(`StopKey`)가 같을 때만 묶고 제목은 서버가 준 `location` 을 쓴다. 주소가 다르면 1명짜리 그룹이 정상이다 |
+| **D2** | 종료 요약의 3지표 `총 거리 · 소요 시간 · 처리 건수` (시안 487-500) | `소요 시간 6분 40초` 는 노선 계획의 `totalDurationS` 다. 실적이 아니라 **계획값이라 매일 같은 숫자가 나온다.** 거리도 마찬가지다 | **2칸으로 줄였다.** 소요 시간 = `DriveSession.elapsed`(`startedAt~endedAt` 실적), 처리 건수 = 세션 구간의 승하차 기록 수. 거리는 계획값밖에 없는데, 그걸 가져오려면 `rideevent` 화면이 `routing` 을 참조해야 해서(C-1) **뺐다** — 틀린 숫자 3개보다 맞는 숫자 2개가 낫다 |
+| **D3** | 로그인 화면에 `한빛학원 · 운행 기록 앱` (시안 164) | 테넌트는 로그인 후 JWT 에서야 알 수 있다. 하드코딩하면 다른 학원에서 틀린 이름이 뜬다 | 로그인 전에는 서비스명만. 학원·호차는 로그인 후 **앱바 부제**로 (이미 지켜지고 있다) |
+| **D4** | 앱바 우측에 `운행 종료` 버튼 (시안 119-121) | §0-3 **"주요 동작은 화면 하단 절반, 운전석 팔 도달 범위"** 에 어긋난다. 되돌릴 수 없는 동작의 진입점이 상단·하단 두 곳이 되는 것도 위험하다 | 하단 고정 `_EndDriveBar` 하나만 둔다 |
+
+### 8.2 다음 버전으로 미룬 것 (2026-07-29, 사용자 판단)
+
+| 시안 | 왜 미뤘는가 |
+|---|---|
+| **기사 알림함**(시안 06번 화면)·하단 탭 3번째 | `DRIVER` 가 쓸 수 있는 알림 이력 API 가 없다(`GET /api/notifications` 는 `ACADEMY_ADMIN`·`PLATFORM_ADMIN`, `/children` 은 `PARENT`). WebSocket push 는 연결돼 있는 동안만이라 놓친 알림을 복구할 수 없다. **하단 탭은 지도·명단 2개를 유지한다** |
+| **미승차(`NO_SHOW`) 배지** | 서버가 미승차를 **알림으로만** 발행하고 명단·승하차 응답에는 담지 않는다. 표기 규칙은 `RosterStudentTile.isNoShow` 에 이미 구현돼 있고 **인자가 항상 `false`** 다 — 데이터가 생기면 인자만 채우면 된다. 알림함과 같은 뿌리라 함께 풀린다 |
+
+> 두 항목 모두 **백엔드에 기사용 알림 이력 API 를 추가하면 한꺼번에 해결된다.** 그때까지 화면에 자리표시자를 두지 않는다.
 
 ---
 
