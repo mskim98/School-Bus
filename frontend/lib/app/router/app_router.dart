@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/ui/loading_view.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/presentation/screen/login_screen.dart';
+import '../../features/bus/presentation/widget/driver_app_bar_subtitle.dart';
 import '../../features/location/presentation/screen/admin_monitor_screen.dart';
 import '../../features/notification/presentation/screen/admin_notification_screen.dart';
 import '../../features/rideevent/presentation/screen/driver_roster_screen.dart';
@@ -53,6 +54,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           navigationShell: shell,
           // 기사는 운행 중 폰으로 쓴다 — 데스크톱에서 열어도 모바일 레이아웃을 유지한다.
           forceCompact: true,
+          // 담당 차·노선·운행일은 탭을 옮겨도 계속 보여야 한다. 관리자 셸은
+          // 여러 버스를 동시에 보므로 이런 고정 맥락이 없어 주지 않는다.
+          subtitle: const DriverAppBarSubtitle(),
           destinations: const [
             ShellDestination(
               label: '오늘의 노선',

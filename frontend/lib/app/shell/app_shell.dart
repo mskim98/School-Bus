@@ -32,6 +32,7 @@ class AppShell extends ConsumerWidget {
     required this.navigationShell,
     required this.destinations,
     this.forceCompact = false,
+    this.subtitle,
   });
 
   /// go_router 의 [StatefulShellRoute] 가 넘겨주는 브랜치 상태.
@@ -46,11 +47,67 @@ class AppShell extends ConsumerWidget {
   /// 검증하게 된다. 넓은 화면에서는 폰 폭으로 가운데 정렬해 보여준다.
   final bool forceCompact;
 
+  /// 앱바 제목 아래에 붙일 한 줄. null 이면 지금까지처럼 제목만 나온다.
+  ///
+  /// **기사 셸만 준다.** 기사는 "어느 차로 어느 편을" 몰고 있는지가 화면을
+  /// 옮겨 다녀도 계속 보여야 하는데, 관리자는 여러 버스를 동시에 보므로 그런
+  /// 고정된 맥락이 없다. 셸은 자리와 글자 크기만 정하고 **무엇을 쓸지는 넘겨받는다**
+  /// — 셸이 버스를 알면 `app/` 이 feature 를 아는 게 된다(컨벤션 §2).
+  final Widget? subtitle;
+
   void _onSelect(int index) {
     // 이미 선택된 탭을 다시 누르면 그 탭의 첫 화면으로 되돌린다(흔한 기대 동작).
     navigationShell.goBranch(
       index,
       initialLocation: index == navigationShell.currentIndex,
+    );
+  }
+
+  /// 앱바 높이. 부제가 없으면 M3 기본값 그대로다.
+  ///
+  /// ⚠️ 기본 56 은 **제목 한 줄** 기준이라, 부제를 더한 2줄은 글자 배율 **1.3배부터
+  /// 앱바 밖으로 넘친다**(2026-07-29 위젯 테스트 실측: 제목 top −4.5 · 부제
+  /// bottom 60.5 / 앱바 0~56). 오버플로 예외가 안 떠서 눈에 안 띄지만 실제로는
+  /// 제목이 상태바로 파고들고 부제가 본문 첫 줄과 겹친다.
+  ///
+  /// 부제는 `3호차 · 하원 A노선` 처럼 **지금 어느 차의 어느 편인지**를 말하는 값이라
+  /// 잘리면 안 된다. 운전석에서 배율을 키워 쓰는 기사가 실제로 많다.
+  ///
+  /// 1.34 로 묶는 이유: M3 가 앱바 텍스트 배율을 그 값에서 클램프해 글자가 더 커지지
+  /// 않는다. 높이만 더 늘리면 빈 공간만 생긴다.
+  double _toolbarHeight(BuildContext context) {
+    if (subtitle == null) return kToolbarHeight;
+    final scale = MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.34);
+    return kToolbarHeight * scale;
+  }
+
+  /// 앱바 제목. [subtitle] 이 없으면 지금까지와 똑같이 한 줄짜리 제목이다.
+  ///
+  /// 두 줄 모두 `maxLines: 1` 로 자른다 — 노선명이 길다고 줄바꿈되면 높이를 키워도
+  /// 결국 넘친다. 높이는 [_toolbarHeight] 가 배율에 맞춰 늘린다.
+  Widget _title(BuildContext context, String label) {
+    final subtitle = this.subtitle;
+    if (subtitle == null) return Text(label);
+
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 스타일을 지정하지 않는다 — `AppBarTheme.titleTextStyle` 을 그대로 물려받아
+        // 부제가 붙었다고 제목 크기가 달라지지 않게 한다.
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        // 부제의 크기·색은 **셸이 정한다.** 넘겨받은 위젯이 스타일까지 고르면
+        // 부제를 다는 셸이 늘어날 때마다 모양이 갈라진다.
+        DefaultTextStyle.merge(
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w400,
+          ),
+          child: subtitle,
+        ),
+      ],
     );
   }
 
@@ -67,7 +124,8 @@ class AppShell extends ConsumerWidget {
 
     final scaffold = Scaffold(
       appBar: AppBar(
-        title: Text(destinations[current].label),
+        toolbarHeight: _toolbarHeight(context),
+        title: _title(context, destinations[current].label),
         actions: const [_AccountButton()],
       ),
       body: isWide
