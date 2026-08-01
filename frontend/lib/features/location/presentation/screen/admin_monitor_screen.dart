@@ -9,7 +9,20 @@ import '../../../../core/ui/app_tone.dart';
 import '../../../../core/ui/async_section.dart';
 import '../../../../core/ui/empty_view.dart';
 import '../../../../core/ui/skeleton_box.dart';
+// ⚠️ feature 교차 참조 — **presentation 계층에서 읽기만** 한다(컨벤션 C-1 예외).
+// 관제 지도는 위치(location)만으로는 성립하지 않는다. "이 버스가 지금 어느 길을
+// 도는가"는 노선(routing)이, "몇 명 태웠나"는 운행 세션(drivesession)과 승하차
+// 기록(rideevent)이 갖고 있다. 이걸 `bus_monitor_controller`(application)가 직접
+// 읽으면 폴링 컨트롤러가 네 feature 를 끌고 다니게 되고, 3초 폴링이 돌 때마다
+// 노선 조회까지 딸려 나간다. 조립은 화면에서만 하고 상태 계층은 서로를 모른다.
+import '../../../drivesession/application/admin_bus_session_provider.dart';
+import '../../../routing/application/admin_bus_route_provider.dart';
+import '../../../routing/application/admin_tenant_provider.dart';
+import '../../../routing/domain/route_plan.dart';
+import '../../../routing/domain/route_stop_group.dart';
 import '../../application/bus_monitor_controller.dart';
+import '../../domain/monitored_bus.dart';
+import '../widget/bus_detail_panel.dart';
 import '../widget/monitored_bus_tile.dart';
 
 /// 관리자 관제 지도(C9) — 학원의 버스 최신 위치를 3초마다 폴링해 지도에 얹는다.
@@ -90,6 +103,12 @@ class _AdminMonitorScreenState extends ConsumerState<AdminMonitorScreen>
 
     final map = _MapPanel(state: state);
     final list = _BusListPanel(state: state, now: now);
+    // 고른 버스가 있을 때만 상세를 낸다. 판단에 provider 를 읽지 않는 게 중요하다 —
+    // 이 메서드는 `AsyncSection` 의 build 안에서 불리므로 여기서 `ref.watch` 를
+    // 쓰면 이 위젯이 아니라 남의 build 에 의존을 등록하게 된다.
+    final detail = state.selectedBus == null
+        ? null
+        : _BusDetailSection(bus: state.selectedBus!, now: now);
 
     return Column(
       children: [
@@ -104,7 +123,17 @@ class _AdminMonitorScreenState extends ConsumerState<AdminMonitorScreen>
                       width: width >= AppBreakpoints.expanded
                           ? _sidePanelWidthWide
                           : _sidePanelWidth,
-                      child: list,
+                      // 넓은 화면에서는 목록 아래에 상세를 붙인다. 지도를 좁히면
+                      // 경로가 안 읽히고, 지도를 덮으면 버스를 놓친다.
+                      child: detail == null
+                          ? list
+                          : Column(
+                              children: [
+                                Expanded(child: list),
+                                const Divider(height: 1),
+                                Expanded(child: detail),
+                              ],
+                            ),
                     ),
                     const VerticalDivider(width: 1),
                     Expanded(child: map),
@@ -114,11 +143,44 @@ class _AdminMonitorScreenState extends ConsumerState<AdminMonitorScreen>
                   children: [
                     Expanded(child: map),
                     const Divider(height: 1),
-                    SizedBox(height: _bottomPanelHeight, child: list),
+                    // 좁은 화면에서는 고른 버스의 상세가 목록을 대신한다 —
+                    // 둘 다 넣으면 각자 손바닥만 해져서 어느 쪽도 못 읽는다.
+                    SizedBox(
+                      height: _bottomPanelHeight,
+                      child: detail ?? list,
+                    ),
                   ],
                 ),
         ),
       ],
+    );
+  }
+
+}
+
+/// 고른 버스의 상세. **자기 `ref` 를 갖기 위해** 별도 위젯이다.
+///
+/// 화면 State 의 `ref` 로 읽으면 `AsyncSection` 의 build 에 의존이 걸려 갱신이
+/// 어긋난다(`_MapPanel` 도 같은 이유로 분리돼 있다).
+class _BusDetailSection extends ConsumerWidget {
+  const _BusDetailSection({required this.bus, required this.now});
+
+  final MonitoredBus bus;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 상세 조회가 전부 tenantId 를 요구한다. 관리자 화면이라 사실상 항상 있지만,
+    // 없더라도 지도·목록은 그대로 떠야 하므로 여기서만 조용히 빠진다.
+    final tenant = ref.watch(adminTenantProvider);
+    if (tenant == null) return const SizedBox.shrink();
+
+    return BusDetailPanel(
+      bus: bus,
+      tenantId: tenant.id,
+      now: now,
+      onClose: () =>
+          ref.read(busMonitorControllerProvider.notifier).select(null),
     );
   }
 }
@@ -143,7 +205,20 @@ class _MapPanel extends ConsumerWidget {
         ? [selected]
         : state.buses.where((bus) => bus.hasPosition);
 
+    final plan = _selectedPlan(ref, selected);
+
     final markers = [
+      // 정차 마커를 **버스보다 먼저** 넣는다 — 뒤에 넣은 것이 위에 그려지므로,
+      // 버스가 정류장에 붙어 섰을 때 정차 마커에 가리지 않는다.
+      if (plan != null)
+        for (final group in RouteStopGroup.group(plan.stops))
+          MapMarkerSpec(
+            point: group.point,
+            // 관제는 "다음 정차"를 알 수 없다 — 그건 기사 화면이 명단으로 판단하는
+            // 값이다. 여기서 하나를 채운 원으로 그리면 근거 없는 강조가 된다(§5.3).
+            kind: MapMarkerKind.upcomingStop,
+            label: '${group.seq}',
+          ),
       for (final bus in shown)
         MapMarkerSpec(
           point: bus.position!.point,
@@ -151,6 +226,11 @@ class _MapPanel extends ConsumerWidget {
           label: bus.name,
           onTap: () => controller.select(bus.busId),
         ),
+    ];
+
+    final routes = [
+      if (plan != null && plan.path.isNotEmpty)
+        MapRouteSpec(points: plan.path),
     ];
 
     // 지도 자리는 비어 있을 때도 **지도 색**으로 남긴다(§5.3) — 표면색으로 칠하면
@@ -165,8 +245,40 @@ class _MapPanel extends ConsumerWidget {
               title: '아직 위치를 보고한 버스가 없습니다',
               description: '기사 앱에서 위치 전송을 켜면 이곳에 표시됩니다.',
             )
-          : adapter.build(markers: markers),
+          : adapter.build(markers: markers, routes: routes),
     );
+  }
+
+  /// 지도에 그릴 노선. 아무 버스도 안 골랐으면 null 이다.
+  ///
+  /// **여러 버스의 경로를 한꺼번에 그리지 않는다** — 학원 버스가 대여섯 대만 돼도
+  /// 지도가 선 뭉치가 돼서 아무것도 못 읽는다. 고른 한 대만 그린다.
+  ///
+  /// 방향이 둘(등원·하원) 다 배포돼 있으면 **지금 도는 쪽**을 그린다. 운행 중이
+  /// 아니면 첫 번째(등원 우선)를 그린다 — 둘을 겹쳐 그리면 어느 선이 어느 편인지
+  /// 구분할 방법이 지도에 없다.
+  ///
+  /// 조회는 전부 `autoDispose.family` 라 **선택이 바뀔 때만** 요청이 나간다.
+  /// 이 화면은 3초마다 위치를 다시 부르지만 노선·세션은 그 주기를 타지 않는다.
+  RoutePlan? _selectedPlan(WidgetRef ref, MonitoredBus? selected) {
+    if (selected == null) return null;
+    final tenant = ref.watch(adminTenantProvider);
+    if (tenant == null) return null;
+
+    final query = (tenantId: tenant.id, busId: selected.busId);
+    // 노선을 못 받아도 지도는 떠야 한다 — 마커만 그리고 넘어간다(C-1 예외 조건 ③).
+    final plans =
+        ref.watch(adminBusRoutePlansProvider(query)).value ??
+        const <RoutePlan>[];
+    if (plans.isEmpty) return null;
+
+    final session = ref.watch(adminBusSessionProvider(query)).value;
+    if (session != null && session.isInProgress) {
+      for (final plan in plans) {
+        if (plan.direction.wireName == session.direction.wireName) return plan;
+      }
+    }
+    return plans.first;
   }
 }
 
