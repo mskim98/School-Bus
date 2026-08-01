@@ -7,19 +7,29 @@ import '../../../../core/ui/app_tone.dart';
 import '../../domain/route_plan.dart';
 import '../../domain/route_plan_status.dart';
 
-/// 노선 계획 한 건 요약 — 배차 검토 목록과 노선 목록이 함께 쓴다.
+/// 노선 계획 한 건 요약 — **훑는 목록**용 카드다.
 ///
-/// ⚠️ **버스 이름을 못 보여준다.** 노선 API 는 `busId` 만 주고 이름은 버스 API 에만 있다.
-/// 정차의 학생 이름이 없는 것과 같은 제약이라 표기 방식을 맞춰 `#id` 로 둔다.
+/// 배차 검토처럼 확정 여부를 판단해야 하는 자리는 `BusAssignmentCard` 를 쓴다.
+/// 이 카드는 정원·배정 학생을 내지 않는다 — 노선 목록에서 그걸 다 펼치면
+/// 계획이 쌓일수록(같은 버스·방향이 회차로 누적된다) 목록이 읽히지 않는다.
+///
+/// [busName] 을 안 넘기면 `버스 #id` 로 뜬다. 이름은 노선 API 에 없고
+/// `busDirectoryProvider`(버스 명부)에서만 오므로, 넘길 수 있는 화면만 넘긴다 —
+/// 명부를 못 받았다고 노선 목록이 비면 안 된다.
 class RoutePlanCard extends StatelessWidget {
   const RoutePlanCard({
     super.key,
     required this.plan,
+    this.busName,
     this.selected = false,
     this.onTap,
   });
 
   final RoutePlan plan;
+
+  /// 호차명(`3호차`). null 이면 `버스 #id`.
+  final String? busName;
+
   final bool selected;
   final VoidCallback? onTap;
 
@@ -59,10 +69,12 @@ class RoutePlanCard extends StatelessWidget {
                               color: scheme.primary,
                             ),
                             const SizedBox(width: AppSpacing.xs),
-                            Text(
-                              '버스 #${plan.busId}',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
+                            Flexible(
+                              child: Text(
+                                busName ?? '버스 #${plan.busId}',
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ],

@@ -10,13 +10,19 @@ import '../../../../core/ui/app_tone.dart';
 import '../../../../core/ui/async_section.dart';
 import '../../../../core/ui/empty_view.dart';
 import '../../../../core/ui/skeleton_box.dart';
+// ⚠️ 다른 feature 의 `application/` 을 읽는다 — 컨벤션 §9 C-1 의 **허용 예외**다.
+// 조건 셋을 모두 지킨다: ① 읽는 쪽이 `presentation/` ② `ref.watch` 만 하고 저쪽
+// 컨트롤러의 메서드는 부르지 않는다 ③ 명부가 없어도 이 화면은 그려진다
+// (`버스 #1`·`#7` 로 뜨고 정원 칸만 빈다).
+import '../../../bus/application/bus_directory.dart';
+import '../../../student/application/student_directory.dart';
 import '../../application/admin_dispatch_controller.dart';
 import '../../application/admin_tenant_provider.dart';
 import '../../domain/auto_assign_result.dart';
 import '../../domain/route_plan.dart';
 import '../widget/admin_tenant_badge.dart';
+import '../widget/bus_assignment_card.dart';
 import '../widget/excluded_students_banner.dart';
-import '../widget/route_plan_card.dart';
 import '../widget/route_plan_map.dart';
 
 /// 관리자: 배차 — 제안 → 검토 → 확정(C10).
@@ -69,8 +75,14 @@ class AdminDispatchScreen extends ConsumerWidget {
                     '방향과 운행일을 고르고 "제안 받기"를 누르면 버스별 노선을 계산해 보여줍니다.\n'
                     '제안 단계에서는 학생 배정이 바뀌지 않습니다.',
               ),
-              DispatchStage.review => _ReviewView(state: state),
-              DispatchStage.confirmed => _ConfirmedView(state: state),
+              DispatchStage.review => _ReviewView(
+                state: state,
+                tenantId: tenant.id,
+              ),
+              DispatchStage.confirmed => _ConfirmedView(
+                state: state,
+                tenantId: tenant.id,
+              ),
             },
           ),
         ),
@@ -211,9 +223,10 @@ class _ServiceDateField extends ConsumerWidget {
 
 /// 제안 검토 — 좌측 계획 목록, 우측 지도 미리보기.
 class _ReviewView extends StatelessWidget {
-  const _ReviewView({required this.state});
+  const _ReviewView({required this.state, required this.tenantId});
 
   final AdminDispatchState state;
+  final int tenantId;
 
   /// 검토 패널 폭. 노선 카드 한 장이 접히지 않고 들어가는 최소치다.
   static const _panelWidth = 420.0;
@@ -224,7 +237,11 @@ class _ReviewView extends StatelessWidget {
     if (proposal == null) return const SizedBox.shrink();
 
     final isWide = MediaQuery.sizeOf(context).width >= AppBreakpoints.expanded;
-    final panel = _ReviewPanel(state: state, proposal: proposal);
+    final panel = _ReviewPanel(
+      state: state,
+      proposal: proposal,
+      tenantId: tenantId,
+    );
     final map = RoutePlanMap(plans: proposal.plans);
 
     if (!isWide) {
@@ -255,10 +272,15 @@ class _ReviewView extends StatelessWidget {
 }
 
 class _ReviewPanel extends ConsumerWidget {
-  const _ReviewPanel({required this.state, required this.proposal});
+  const _ReviewPanel({
+    required this.state,
+    required this.proposal,
+    required this.tenantId,
+  });
 
   final AdminDispatchState state;
   final AutoAssignResult proposal;
+  final int tenantId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -283,8 +305,8 @@ class _ReviewPanel extends ConsumerWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: AppSpacing.sm),
-          for (final plan in proposal.plans) RoutePlanCard(plan: plan),
+          const SizedBox(height: AppSpacing.smd),
+          _BusAssignmentList(tenantId: tenantId, plans: proposal.plans),
         ],
 
         const SizedBox(height: AppSpacing.md),
@@ -304,6 +326,45 @@ class _ReviewPanel extends ConsumerWidget {
                       .read(adminDispatchControllerProvider.notifier)
                       .confirm()
                 : null,
+          ),
+      ],
+    );
+  }
+}
+
+/// 버스 간 거리 비교 + 버스별 배정 카드. 검토·확정 두 화면이 함께 쓴다.
+///
+/// **명부는 거들 뿐이다.** 호차명·학생 이름·좌석 수가 아직 안 왔거나 실패해도
+/// 카드는 `버스 #1`·`#7` 로 그려지고 정원 칸만 빈다 — 명부 때문에 제안 결과가
+/// 가려지면 관리자가 확정 판단을 아예 못 한다(컨벤션 §9 C-1 예외 조건 ③).
+class _BusAssignmentList extends ConsumerWidget {
+  const _BusAssignmentList({required this.tenantId, required this.plans});
+
+  final int tenantId;
+  final List<RoutePlan> plans;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final buses =
+        ref.watch(busDirectoryProvider(tenantId)).value ??
+        const BusDirectory.empty();
+    final students =
+        ref.watch(studentDirectoryProvider(tenantId)).value ??
+        const StudentDirectory.empty();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 알고리즘이 거리 균형을 맞추지 않는다는 사실을 확정 **전에** 보여준다
+        // (검증 보고서 L1·L2). 버스가 한 대뿐이면 스스로 사라진다.
+        BusDistanceComparison(plans: plans, busNameOf: buses.nameOf),
+        if (plans.length > 1) const SizedBox(height: AppSpacing.sm),
+        for (final plan in plans)
+          BusAssignmentCard(
+            plan: plan,
+            busName: buses.nameOf(plan.busId),
+            seatCapacity: buses.seatCapacityOf(plan.busId),
+            studentNameOf: students.nameOf,
           ),
       ],
     );
@@ -379,9 +440,10 @@ class _AlreadyConfirmedNotice extends StatelessWidget {
 
 /// 확정 완료 — 배정 커밋 + 승인 + 배포가 모두 끝난 상태.
 class _ConfirmedView extends ConsumerWidget {
-  const _ConfirmedView({required this.state});
+  const _ConfirmedView({required this.state, required this.tenantId});
 
   final AdminDispatchState state;
+  final int tenantId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -417,7 +479,9 @@ class _ConfirmedView extends ConsumerWidget {
         ExcludedStudentsBanner(studentNames: excluded),
         if (excluded.isNotEmpty) const SizedBox(height: AppSpacing.md),
 
-        for (final plan in state.confirmed) RoutePlanCard(plan: plan),
+        // 확정 뒤에도 같은 표기를 쓴다 — 방금 무엇을 배포했는지가 검토 화면과
+        // 다르게 보이면 관리자가 배정이 바뀐 줄 안다.
+        _BusAssignmentList(tenantId: tenantId, plans: state.confirmed),
 
         const SizedBox(height: AppSpacing.md),
         SizedBox(

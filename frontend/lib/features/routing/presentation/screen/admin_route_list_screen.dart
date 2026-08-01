@@ -10,9 +10,13 @@ import '../../../../core/ui/app_tone.dart';
 import '../../../../core/ui/async_section.dart';
 import '../../../../core/ui/empty_view.dart';
 import '../../../../core/ui/skeleton_box.dart';
+// ⚠️ feature 교차 참조 — presentation 에서 **읽기만** 한다(컨벤션 C-1 예외).
+// 노선 응답에는 버스 이름이 없어 명부와 합쳐야 `3호차` 를 쓸 수 있다.
+import '../../../bus/application/bus_directory.dart';
 import '../../application/admin_route_list_controller.dart';
 import '../../application/admin_tenant_provider.dart';
 import '../../domain/route_plan.dart';
+import '../../domain/route_stop_group.dart';
 import '../widget/admin_tenant_badge.dart';
 import '../widget/route_plan_card.dart';
 import '../widget/route_plan_map.dart';
@@ -147,6 +151,9 @@ class _PlanList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedBusId = ref.watch(adminRouteBusFilterProvider);
+    // 버스 이름은 버스 명부에만 있다(노선 API 는 busId 만 준다).
+    // **명부를 못 받아도 목록은 떠야 한다** — 그때는 `버스 #id` 로 보인다.
+    final buses = _busDirectory(ref);
 
     return Column(
       children: [
@@ -167,7 +174,7 @@ class _PlanList extends ConsumerWidget {
                 ),
                 for (final busId in state.busIds)
                   ChoiceChip(
-                    label: Text('버스 #$busId'),
+                    label: Text(buses.nameOf(busId)),
                     selected: selectedBusId == busId,
                     onSelected: (_) => ref
                         .read(adminRouteBusFilterProvider.notifier)
@@ -184,6 +191,7 @@ class _PlanList extends ConsumerWidget {
               final plan = state.plans[index];
               return RoutePlanCard(
                 plan: plan,
+                busName: buses.find(plan.busId)?.name,
                 selected: plan.id == selectedId,
                 onTap: () => context.go(AppRoutes.adminRouteDetailOf(plan.id)),
               );
@@ -193,6 +201,18 @@ class _PlanList extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// 학원의 버스 명부. 못 받았으면 빈 명부라 `버스 #id` 로 떨어진다.
+///
+/// ⚠️ feature 교차 참조 — **presentation 에서 읽기만** 한다(컨벤션 C-1 예외).
+/// 노선 응답에 버스 이름이 없어서 여기서 합치는 수밖에 없고, 명부가 늦거나
+/// 실패해도 노선 목록 자체는 그대로 떠야 한다(예외 조건 ③).
+BusDirectory _busDirectory(WidgetRef ref) {
+  final tenant = ref.watch(adminTenantProvider);
+  if (tenant == null) return const BusDirectory.empty();
+  return ref.watch(busDirectoryProvider(tenant.id)).value ??
+      const BusDirectory.empty();
 }
 
 /// 노선 상세 — 지도(경로 + 정차 마커) + 정차 순서 목록.
@@ -255,16 +275,22 @@ class _PlanDetail extends StatelessWidget {
   }
 }
 
-class _DetailHeader extends StatelessWidget {
+class _DetailHeader extends ConsumerWidget {
   const _DetailHeader({required this.plan, required this.showBackButton});
 
   final RoutePlan plan;
   final bool showBackButton;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final busName = _busDirectory(ref).find(plan.busId)?.name;
+
+    // ⚠️ `plan.stops.length` 는 **정차 수가 아니라 학생 수**다. 서버가 정차를
+    // 학생 단위로 주기 때문에(§5.4), 같은 정류장에서 4명이 타면 4줄이 온다.
+    // 그대로 쓰면 정차 2곳짜리 노선이 `정차 6곳` 으로 보인다.
+    final stopCount = RouteStopGroup.group(plan.stops).length;
 
     return Container(
       width: double.infinity,
@@ -295,7 +321,7 @@ class _DetailHeader extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
-                      '버스 #${plan.busId} · ${plan.direction.label}',
+                      '${busName ?? '버스 #${plan.busId}'} · ${plan.direction.label}',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -308,7 +334,7 @@ class _DetailHeader extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   '${plan.serviceDateLabel} · ${plan.version}회차 · '
-                  '정차 ${plan.stops.length}곳 · ${plan.distanceLabel} · ${plan.durationLabel}',
+                  '정차 $stopCount곳 · ${plan.distanceLabel} · ${plan.durationLabel}',
                   style: AppTypography.mono(
                     context,
                   ).copyWith(color: scheme.onSurfaceVariant),
