@@ -9,6 +9,7 @@ import '../../../core/location/spec/location_source_kind.dart';
 import '../../../core/map/spec/map_view_adapter.dart';
 import '../../auth/application/auth_controller.dart';
 import '../data/location_repository.dart';
+import '../domain/monitored_bus.dart';
 
 /// 기사 위치 보고 상태.
 ///
@@ -168,11 +169,21 @@ class DriverLocationController extends Notifier<DriverLocationState> {
     final source = _source;
     if (source == null) return;
 
+    // 출처를 좌표를 읽기 **전에** 정한다. `source.read()` 를 기다리는 동안 기사가
+    // 토글을 돌리면 state.sourceKind 는 새 값이 되지만 이 tick 의 좌표는 여전히
+    // 위에서 잡은 옛 source 가 만든 것이라, 나중에 읽으면 좌표와 출처가 어긋난다.
+    final origin = LocationOrigin.fromSourceKind(state.sourceKind);
+
     try {
       final point = await source.read();
       await ref
           .read(locationRepositoryProvider)
-          .reportBusLocation(busId: busId, lat: point.lat, lng: point.lng);
+          .reportBusLocation(
+            busId: busId,
+            lat: point.lat,
+            lng: point.lng,
+            origin: origin,
+          );
 
       // await 사이에 화면을 벗어났을 수 있다 — 정리된 뒤 state 를 쓰면 예외가 난다.
       if (!ref.mounted) return;

@@ -10,6 +10,7 @@ import 'package:school_bus/features/location/application/driver_location_control
 import 'package:school_bus/features/location/data/dto/bus_location_dto.dart';
 import 'package:school_bus/features/location/data/dto/bus_summary_dto.dart';
 import 'package:school_bus/features/location/data/location_repository.dart';
+import 'package:school_bus/features/location/domain/monitored_bus.dart';
 import 'package:school_bus/shared/domain/auth_session.dart';
 import 'package:school_bus/shared/domain/role.dart';
 
@@ -53,15 +54,17 @@ class _FakeRepository implements LocationRepository {
   _FakeRepository({this.error});
 
   final ApiException? error;
-  final reports = <({int busId, double lat, double lng})>[];
+  final reports = <({int busId, double lat, double lng, LocationOrigin origin})>[
+  ];
 
   @override
   Future<void> reportBusLocation({
     required int busId,
     required double lat,
     required double lng,
+    required LocationOrigin origin,
   }) async {
-    reports.add((busId: busId, lat: lat, lng: lng));
+    reports.add((busId: busId, lat: lat, lng: lng, origin: origin));
     if (error != null) throw error!;
   }
 
@@ -205,6 +208,74 @@ void main() {
       expect(
         container.read(driverLocationControllerProvider).sourceKind,
         LocationSourceKind.gps,
+      );
+
+      await controller.setEnabled(false, mockPath: const []);
+    });
+
+    test('★ Mock 으로 보내는 좌표는 보고에 MOCK 으로 표시된다', () async {
+      final container = containerWith(session: _driver());
+      final controller = container.read(
+        driverLocationControllerProvider.notifier,
+      );
+
+      await controller.setEnabled(
+        true,
+        mockPath: const [GeoPoint(37.5, 127.0)],
+      );
+      await _settle();
+
+      expect(repository.reports.single.origin, LocationOrigin.mock);
+      expect(LocationOrigin.mock.wireName, 'MOCK');
+
+      await controller.setEnabled(false, mockPath: const []);
+    });
+
+    test('★ 실 GPS 로 켜면 보고에 GPS 로 나간다', () async {
+      final container = containerWith(session: _driver());
+      final controller = container.read(
+        driverLocationControllerProvider.notifier,
+      );
+
+      controller.setSourceKind(LocationSourceKind.gps, mockPath: const []);
+      await controller.setEnabled(true, mockPath: const []);
+      await _settle();
+
+      expect(repository.reports.single.origin, LocationOrigin.gps);
+      expect(LocationOrigin.gps.wireName, 'GPS');
+
+      await controller.setEnabled(false, mockPath: const []);
+    });
+
+    test('★ 전환 직후 보고부터 새 출처가 실린다 — 옛 출처가 계속 나가면 표기가 거짓이 된다', () async {
+      final container = containerWith(session: _driver());
+      final controller = container.read(
+        driverLocationControllerProvider.notifier,
+      );
+
+      await controller.setEnabled(
+        true,
+        mockPath: const [GeoPoint(37.5, 127.0)],
+      );
+      await _settle();
+      final beforeSwitch = repository.reports.length;
+
+      controller.setSourceKind(LocationSourceKind.gps, mockPath: const []);
+      await _settle();
+
+      expect(
+        repository.reports.length,
+        greaterThan(beforeSwitch),
+        reason: '전환은 타이머를 다시 걸며 즉시 1회 보낸다',
+      );
+      expect(
+        repository.reports.take(beforeSwitch).map((r) => r.origin),
+        everyElement(LocationOrigin.mock),
+        reason: '전환 전 보고는 Mock 그대로다',
+      );
+      expect(
+        repository.reports.skip(beforeSwitch).map((r) => r.origin),
+        everyElement(LocationOrigin.gps),
       );
 
       await controller.setEnabled(false, mockPath: const []);

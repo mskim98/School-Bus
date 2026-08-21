@@ -1,21 +1,25 @@
+import '../../../core/location/spec/location_source_kind.dart';
 import '../../../core/map/spec/map_view_adapter.dart';
 import '../data/dto/bus_location_dto.dart';
 import '../data/dto/bus_summary_dto.dart';
 
 /// 좌표 출처. 서버가 `GPS` / `MOCK` 두 값만 준다.
 ///
-/// ⚠️ 기사 앱의 Mock/실GPS 토글과 **연동되지 않는다** — `POST /api/locations/bus` 로
-/// 들어온 좌표는 서버가 전부 `GPS` 로 기록하고, `MOCK` 은 백엔드 시뮬레이터가 남긴
-/// 것이다. 화면에서도 "서버가 분류한 출처"로만 읽어야 한다.
+/// **읽기·쓰기 양쪽이 쓰는 하나의 표현이다.** 관제 화면은 서버 응답을
+/// [fromWire] 로 읽고, 기사 앱은 자기 좌표 출처를 [fromSourceKind] 로 옮겨
+/// [wireName] 을 `POST /api/locations/bus` 본문에 실어 보낸다. 전송 문자열이
+/// 여기 말고 다른 곳에 리터럴로 나타나면 두 표기가 어긋난다.
 enum LocationOrigin {
   gps('GPS', '단말'),
   mock('MOCK', '시뮬레이터'),
 
   /// 서버가 새 값을 추가했을 때 화면이 죽지 않도록 두는 자리.
+  /// **보고에는 쓰지 않는다** — [fromSourceKind] 는 이 값을 돌려주지 않는다.
   unknown('', '알 수 없음');
 
   const LocationOrigin(this.wireName, this.label);
 
+  /// 서버 enum `LocationOrigin` 과 글자까지 일치해야 하는 전송·수신 표기.
   final String wireName;
   final String label;
 
@@ -25,6 +29,16 @@ enum LocationOrigin {
     }
     return LocationOrigin.unknown;
   }
+
+  /// 기사 앱이 지금 쓰는 좌표 소스를 서버가 기록할 출처로 옮긴다.
+  ///
+  /// 이 변환이 없으면 Mock 좌표도 서버에 `GPS` 로 남아 관제 화면의 "출처" 표기가
+  /// 실제와 달라진다(서버는 `origin` 이 없는 요청을 `GPS` 로 처리한다).
+  static LocationOrigin fromSourceKind(LocationSourceKind kind) =>
+      switch (kind) {
+        LocationSourceKind.mock => LocationOrigin.mock,
+        LocationSourceKind.gps => LocationOrigin.gps,
+      };
 }
 
 /// 버스가 마지막으로 알려준 위치.

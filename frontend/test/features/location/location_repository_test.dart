@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:school_bus/core/api/api_client.dart';
 import 'package:school_bus/features/location/data/location_repository.dart';
+import 'package:school_bus/features/location/domain/monitored_bus.dart';
 
 /// 서버 대신 정해진 응답을 돌려주는 어댑터(`api_client_test` 와 같은 방식).
 class _FakeAdapter implements HttpClientAdapter {
@@ -44,13 +45,34 @@ void main() {
   });
 
   group('reportBusLocation — POST /api/locations/bus', () {
-    test('busId·lat·lng 를 계약대로 보낸다', () async {
-      await repository.reportBusLocation(busId: 1, lat: 37.5075, lng: 127.0355);
+    test('busId·lat·lng·origin 을 계약대로 보낸다', () async {
+      await repository.reportBusLocation(
+        busId: 1,
+        lat: 37.5075,
+        lng: 127.0355,
+        origin: LocationOrigin.gps,
+      );
 
       final request = adapter.lastRequest!;
       expect(request.method, 'POST');
       expect(request.path, '/api/locations/bus');
-      expect(request.data, {'busId': 1, 'lat': 37.5075, 'lng': 127.0355});
+      expect(request.data, {
+        'busId': 1,
+        'lat': 37.5075,
+        'lng': 127.0355,
+        'origin': 'GPS',
+      });
+    });
+
+    test('★ Mock 출처는 대문자 "MOCK" 으로 나간다 — 서버 enum 과 글자까지 같아야 한다', () async {
+      await repository.reportBusLocation(
+        busId: 1,
+        lat: 37.5,
+        lng: 127.0,
+        origin: LocationOrigin.mock,
+      );
+
+      expect((adapter.lastRequest!.data! as Map)['origin'], 'MOCK');
     });
 
     test('응답 data 가 null 이어도 성공으로 본다', () async {
@@ -58,7 +80,12 @@ void main() {
       adapter.body = '{"success":true,"data":null,"message":null}';
 
       await expectLater(
-        repository.reportBusLocation(busId: 1, lat: 37.5, lng: 127.0),
+        repository.reportBusLocation(
+          busId: 1,
+          lat: 37.5,
+          lng: 127.0,
+          origin: LocationOrigin.gps,
+        ),
         completes,
       );
     });

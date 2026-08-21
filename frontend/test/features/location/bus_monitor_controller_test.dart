@@ -5,6 +5,7 @@ import 'package:school_bus/features/location/application/bus_monitor_controller.
 import 'package:school_bus/features/location/data/dto/bus_location_dto.dart';
 import 'package:school_bus/features/location/data/dto/bus_summary_dto.dart';
 import 'package:school_bus/features/location/data/location_repository.dart';
+import 'package:school_bus/features/location/domain/monitored_bus.dart';
 import 'package:school_bus/shared/domain/auth_session.dart';
 import 'package:school_bus/shared/domain/role.dart';
 
@@ -22,6 +23,7 @@ class _FakeRepository implements LocationRepository {
     required int busId,
     required double lat,
     required double lng,
+    required LocationOrigin origin,
   }) async {}
 
   @override

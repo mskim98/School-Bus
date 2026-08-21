@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_response.dart';
+import '../domain/monitored_bus.dart';
 import 'dto/bus_location_dto.dart';
 import 'dto/bus_summary_dto.dart';
 
@@ -15,15 +16,25 @@ class LocationRepository {
 
   /// 기사가 자기 버스의 현재 좌표를 보고한다(`POST /api/locations/bus`, 권한 `DRIVER`).
   ///
+  /// [origin] 은 그 좌표를 만든 소스다 — 서버가 그대로 기록해 관제 화면의 "출처"
+  /// 표기가 된다. 문자열 변환은 [LocationOrigin.wireName] 한 곳에서만 한다.
+  /// 필드를 빼고 보내면 서버가 `GPS` 로 처리하므로 구버전 서버와도 어긋나지 않는다.
+  ///
   /// 응답 본문이 없다(`data: null`). 담당 버스가 아니면 403 이 온다.
   Future<void> reportBusLocation({
     required int busId,
     required double lat,
     required double lng,
+    required LocationOrigin origin,
   }) {
     return _client.post(
       '/api/locations/bus',
-      body: {'busId': busId, 'lat': lat, 'lng': lng},
+      body: {
+        'busId': busId,
+        'lat': lat,
+        'lng': lng,
+        'origin': origin.wireName,
+      },
       decode: Decode.unit,
     );
   }

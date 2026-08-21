@@ -26,10 +26,9 @@ class BusLocationDto {
   /// 신선도는 클라이언트가 응답을 받은 시각으로 잰다(`MonitoredBus.observedAt`).
   final String recordedAt;
 
-  /// `GPS` / `MOCK`.
-  ///
-  /// ⚠️ 기사 앱의 Mock/실GPS 토글과 무관하다 — `POST /api/locations/bus` 로 들어온
-  /// 좌표는 서버가 무조건 `GPS` 로 기록하고, `MOCK` 은 백엔드 시뮬레이터가 쓴다.
+  /// `GPS` / `MOCK`. 좌표를 만든 쪽이 보고에 실어 보낸 값을 서버가 그대로 기록한다
+  /// — 기사 앱의 Mock/실GPS 토글, 백엔드 시뮬레이터가 각각 자기 출처를 붙인다.
+  /// `origin` 없이 들어온 보고는 서버가 `GPS` 로 기록한다.
   final String origin;
 
   static BusLocationDto fromJson(Map<String, dynamic> json) => BusLocationDto(
