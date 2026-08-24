@@ -3,8 +3,9 @@
 > **문서 성격**: 화면을 그릴 때 참조하는 **단일 소스**. `FLUTTER_CODE_CONVENTIONS.md`(코드를 어떻게 쓰는가)의 짝이며 **화면을 어떻게 보이게 하는가**를 다룬다.
 > Claude 가 디자인 작업마다 재참조하므로 토큰 효율을 위해 Markdown 으로 유지한다(루트 `CLAUDE.md` 예외 조항).
 >
-> **근거**: `docs/design/source/통학버스 디자인 시스템.dc.html` (Claude Design v0.1, 2026.07) + `docs/design/source/기사앱 MVP.dc.html`
-> **요구 근거**: `docs/DESIGN_BRIEF_DRIVER_MOBILE.md` — 시안과 지시서가 충돌하면 **지시서가 이긴다**(지시서가 입력, 시안이 출력).
+> ⚠ **2026-08-24 방향 전환.** 근거였던 옛 시안·지시서는 폐기됐다(제품이 기사 앱 1종 → 매니저 앱·학부모·학생 앱·관계자 웹·콘솔 4종으로 바뀜).
+> **새 근거**: `docs/brainstorming/_바래다_ 가제 UI/` 의 `.dc.html` 3종(관계자웹·매니저앱·학부모앱) + `_ds/` 토큰. **상태 색은 `FEATURE_SPEC` C-09 가 기준**(그린·앰버·레드·스톤 4색).
+> 아래 §4 접근성 원칙(색 단독 금지 · 48dp 터치 · 직사광선 대비)은 신규 매니저 앱에도 그대로 유효하다.
 > **검사**: `FLUTTER_CODE_CONVENTIONS.md` §9 **C-8** 체크리스트로 `design-system-auditor` 가 훑는다.
 >
 > 작성일 2026-07-29
@@ -112,7 +113,7 @@
 시안은 본문 **Noto Sans KR**, 수치 **Roboto Mono** 를 쓴다. 우리는 **폰트 파일을 번들하지 않고 플랫폼 기본 한글 폰트에 맡긴다.**
 
 - 한글 웹폰트는 서브셋을 해도 수 MB 다. 현재 `main.dart.js` 가 2.2MB 인데 폰트가 그보다 커진다 — 기사 앱은 차 안 LTE 환경이 전제라 초기 로딩이 곧 사용성이다
-- `google_fonts` 패키지는 런타임에 Google CDN 을 때린다. nginx 단일 진입점 구성(`FLUTTER_FRONTEND_PLAN.md` §5)에서 외부 의존이 하나 늘고, 오프라인에서 폰트가 깨진다
+- `google_fonts` 패키지는 런타임에 Google CDN 을 때린다. nginx 단일 진입점 구성에서 외부 의존이 하나 늘고, 오프라인에서 폰트가 깨진다
 - 타이포의 실제 요구(크기·굵기·행간·최소 15px)는 폰트 파일 없이 전부 만족된다
 
 **대신 지켜야 할 것**: Mono 역할은 폰트 대신 `FontFeature.tabularFigures()` 로 대체한다. 시각(`14:05`)·거리·인원수가 갱신될 때 자릿수가 흔들리지 않게 하는 게 Mono 를 쓴 원래 목적이기 때문이다.
@@ -387,8 +388,7 @@ seq=6 studentId=3  37.5045,127.0310  eta=192
 
 | 문서 | 관계 |
 |---|---|
-| `DESIGN_BRIEF_DRIVER_MOBILE.md` | **입력**. 시안이 이걸 어겼으면 이쪽이 맞다 |
-| `docs/design/source/*.dc.html` | **원본 시안**. 값 다툼이 나면 여기가 기준 |
+| `docs/FEATURE_SPEC.md` C-09 | **상태 색의 정의처.** 값 다툼이 나면 여기가 기준 |
+| `docs/brainstorming/_바래다_ 가제 UI/*.dc.html` | 신규 UI 시안 3종 |
 | `FLUTTER_CODE_CONVENTIONS.md` §9 C-8 | 이 문서 준수 여부 **검사 체크리스트** |
-| `DESIGN_MIGRATION_PLAN.md` | 이식 작업 진행 추적 |
-| `FLUTTER_FRONTEND_PLAN.md` | 프론트 전체 계획(무엇을 만드는가) |
+| `docs/IMPLEMENTATION_PLAN.md` | 프론트 계획·진행 추적 (F1~F4) |
